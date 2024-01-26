@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import configparser
 import json
 import logging
@@ -15,33 +16,39 @@ from typing import Optional
 # This tool uses information gathered from a klipper config file, as well as from its own config
 # to automate building and flashing MCUs with klipper.
 
-def process() -> None:
-    """
-    The main entrypoint for kqf.
-    :return: None
-    """
-    logging.getLogger().setLevel(logging.DEBUG)
+def entrypoint() -> None:
     if sys.version_info < (3, 7):
         logging.fatal("Python 3.7 or greater is required")
         sys.exit(1)
 
-    kqf_conf = KQFConfig.get(path="test/kqf.cfg")
-    mcus = {s: KlipperMCU.from_kqf_config(s, kqf_conf) for s in kqf_conf.mcus.keys()}
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-v', action='store_true', help="Enable verbose output")
+    ap.add_argument("-c", metavar="CONFIG_FILE", help="Config file to use", default="~/.kqf/kqf.cfg")
+    ap.set_defaults(cmd_action=None)
 
-    if kqf_conf.klipper_config:
-        logging.debug("Loading MCU definitions from klipper configs")
-        klipper_conf = KlipperConf(kqf_conf.klipper_config)
-        logging.debug(
-            f"Loaded {len(klipper_conf.mcu_names())} MCUs definitions from Klipper: "
-            f"[{', '.join(klipper_conf.mcu_names())}]")
-        logging.debug('Augmenting mcu configs from klipper config')
-        for mcu_name in mcus.keys() & klipper_conf.mcu_names():
-            logging.debug(f'Augmenting {mcu_name} with klipper config')
-            mcu = mcus[mcu_name]
-            klipper_conf.extend_mcu(mcu)
-    for m in mcus:
-        mcus[m].self_extend()
-    logging.log(logging.INFO, "MCU info dump:\n---\n" + "---\n".join([mcus[m].pretty_format() for m in mcus]) + "---")
+    commands = ap.add_subparsers(metavar='ACTION', help="The action to perform")
+    c_dump_mcu = commands.add_parser(name="dump_mcu", help="Prints information about discovered MCUs, mainly for debugging")
+    c_dump_mcu.set_defaults(cmd_action=cmd_dump_mcu)
+
+    args = ap.parse_args()
+
+    logging.basicConfig()
+    if args.v:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    kqf = KQF(config_path=args.c)
+
+    if args.cmd_action:
+        args.cmd_action(kqf, args)
+    else:
+        logging.fatal("No action was specified, kqf will now exit")
+        ap.print_help()
+
+
+
+def cmd_dump_mcu(kqf, args):
+    kqf.inventory()
+    kqf.dump_mcu_info()
 
 
 class KlipperConf(object):
@@ -115,34 +122,40 @@ class KlipperMCU(object):
         """
         # Read the machine type from the flavor
         flavor_path = (self.parent.config_flavors_path / self.flavor).with_suffix('.config').expanduser()
-        # TODO: Gather all notable info about the flavor here, so we don't churn the file
-        if not self.mcu_type and flavor_path.is_file():
+        flavor_mcu_type = None
+        flavor_mcu_chip = None
+        if flavor_path.is_file():
             with flavor_path.open("r") as flavor_file:
                 for line in flavor_file.readlines():
-                    matches = KlipperMCU.RE_MACHINE_TYPE.match(line)
-                    if matches:
-                        self.mcu_type = matches[1]
+                    if flavor_mcu_type and flavor_mcu_chip:
                         break
-            # No dice
-            if not self.mcu_type:
+                    mach_matches = KlipperMCU.RE_MACHINE_TYPE.match(line)
+                    if mach_matches:
+                        flavor_mcu_type = mach_matches[1]
+                        continue
+                    type_matches = KlipperMCU.RE_MCU.match(line)
+                    if type_matches:
+                        flavor_mcu_chip = type_matches[1]
+                        continue
+        # TODO: Gather all notable info about the flavor here, so we don't churn the file
+        if not self.mcu_type:
+            if flavor_mcu_type:
+                self.mcu_type = flavor_mcu_type
+            else:
                 logging.warning(f"Could not determine machine type for flavor '{self.flavor}'")
         # If the chip is unset, then make a decision based on kconfig and mcu type
-        if not self.mcu_chip and self.mcu_type:
-            if self.mcu_type in ['linux']:
-                self.mcu_chip = "N/A"
-            elif self.mcu_type in ['stm32']:  # TODO: Check what other types use this same method
-                with flavor_path.open("r") as flavor_file:
-                    for line in flavor_file.readlines():
-                        matches = KlipperMCU.RE_MCU.match(line)
-                        if matches:
-                            self.mcu_chip = matches[1]
-                            break
-                if not self.mcu_chip:
-                    logging.warning(f"Could not determine mcu type for flavor '{self.flavor}'")
+        if not self.mcu_chip:
+            if self.mcu_type in ['linux', 'pru', 'ar110', 'simulator']:
+                self.mcu_chip = self.mcu_type
+            elif self.mcu_type in ['stm32', 'avr', 'atsam', 'atsamd', 'lpc1768', 'hc32f460', 'rp2040']:
+                if flavor_mcu_chip:
+                    self.mcu_chip = flavor_mcu_chip
+                else:
+                    logging.warning(f"Could not determine mcu type for flavor '{self.flavor}' (missing from config)")
             else:
                 logging.warning(
-                                f"Unable to automatically determine chip type for mcu '{self.name}'"
-                                " - KQF may still function")
+                    f"Unable to automatically determine chip type for mcu '{self.name}'"
+                    " - KQF may still function")
         # If the canbus bitrate is not already known, guess from the interface
         if (
                 self.communication_type == 'can' and
@@ -275,9 +288,9 @@ class KQFConfig(object):
         [mcu]
         # place configuration for your primary MCU here
         
-        #[secondary_mcu]
+        #[mcu secondary_mcu]
         # place configuration for another MCU here, and uncomment the above.
-        #   The section name should match the name in your printer.cfg. ([mcu nameHere] = [nameHere])
+        #   The section name should match the name in your printer.cfg (e.g. [mcu somemcu].
         """)
 
     @staticmethod
@@ -396,6 +409,37 @@ class KQFConfig(object):
             "Could not autodetect klipper config location")
 
 
+class KQF(object):
+    """
+    Program state and other such
+    """
+
+    def __init__(self, config_path: str):
+        self._config = KQFConfig.get(config_path)
+        self._mcus = {s: KlipperMCU.from_kqf_config(s, self._config) for s in self._config.mcus.keys()}
+
+    def dump_mcu_info(self):
+        mcu_info_log = logging.getLogger('kqf.mcu_info')
+        mcu_info_log.setLevel(logging.INFO)
+        mcu_info_log.log(logging.INFO,
+                    "\n" + "---\n".join([self._mcus[m].pretty_format() for m in self._mcus]) + "---")
+
+    def inventory(self, self_extend: bool = True):
+        if self._config.klipper_config:
+            logging.debug("Loading MCU definitions from klipper configs")
+            klipper_conf = KlipperConf(self._config.klipper_config)
+            logging.debug(
+                f"Loaded {len(klipper_conf.mcu_names())} MCUs definitions from Klipper: "
+                f"[{', '.join(klipper_conf.mcu_names())}]")
+            logging.debug('Augmenting mcu configs from klipper config')
+            for mcu_name in self._mcus.keys() & klipper_conf.mcu_names():
+                logging.debug(f'Augmenting {mcu_name} with klipper config')
+                klipper_conf.extend_mcu(self._mcus[mcu_name])
+        if self_extend:
+            for mcu in self._mcus:
+                self._mcus[mcu].self_extend()
+
+
 def get_can_interface_bitrate(ifname: str) -> Optional[str]:
     # noinspection PyBroadException
     try:
@@ -409,4 +453,4 @@ def get_can_interface_bitrate(ifname: str) -> Optional[str]:
 
 
 if __name__ == '__main__':
-    process()
+    entrypoint()
