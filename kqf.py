@@ -3,12 +3,12 @@ import configparser
 import json
 import logging
 import pathlib
+import re
 import subprocess
-import textwrap
-from typing import Optional, List, Union
-from pprint import pprint as pp
-from os import PathLike
 import sys
+import textwrap
+from os import PathLike
+from typing import Optional
 
 
 # Klipper Quick Flash
@@ -26,12 +26,22 @@ def process() -> None:
         sys.exit(1)
 
     kqf_conf = KQFConfig.get(path="test/kqf.cfg")
+    mcus = {s: KlipperMCU.from_kqf_config(s, kqf_conf) for s in kqf_conf.mcus.keys()}
+
     if kqf_conf.klipper_config:
         logging.debug("Loading MCU definitions from klipper configs")
         klipper_conf = KlipperConf(kqf_conf.klipper_config)
         logging.debug(
-                        f"Loaded {len(klipper_conf.mcu_names())} MCUs definitions from Klipper: "
-                        f"[{', '.join(klipper_conf.mcu_names())}]")
+            f"Loaded {len(klipper_conf.mcu_names())} MCUs definitions from Klipper: "
+            f"[{', '.join(klipper_conf.mcu_names())}]")
+        logging.debug('Augmenting mcu configs from klipper config')
+        for mcu_name in mcus.keys() & klipper_conf.mcu_names():
+            logging.debug(f'Augmenting {mcu_name} with klipper config')
+            mcu = mcus[mcu_name]
+            klipper_conf.extend_mcu(mcu)
+    for m in mcus:
+        mcus[m].self_extend()
+    logging.log(logging.INFO, "MCU info dump:\n---\n" + "---\n".join([mcus[m].pretty_format() for m in mcus]) + "---")
 
 
 class KlipperConf(object):
@@ -48,17 +58,17 @@ class KlipperConf(object):
 
     def extend_mcu(self, mcu: 'KlipperMCU'):
         if mcu.name in self.mcu_names():
-            mcu_conf = self.__mcu_sections['mcu.name']
+            mcu_conf = self.__mcu_sections[mcu.name]
             if 'serial' in mcu_conf:
-                mcu.connection_type = 'serial'
-                mcu.connection_id = mcu_conf.get('serial')
-                mcu.connection_baud = mcu_conf.get('baud','56200')
-            elif 'can_uuid' in mcu_conf:
-                mcu.connection_type = 'can'
-                mcu.connection_id = mcu_conf.get('can_uuid')
-                mcu.connection_dev = mcu_conf.get('can_interface', 'can0')
-                # TODO: Get baudrate from can interface
-            mcu.self_extend()
+                mcu.communication_type = mcu.communication_type or 'serial'
+                # TODO Extract from udev
+                mcu.communication_id = mcu.communication_id or mcu_conf.get('serial')
+                mcu.communication_device = mcu.communication_device or mcu_conf.get('serial')
+                mcu.communication_speed = mcu.communication_speed or mcu_conf.get('baud', '250000')
+            elif 'canbus_uuid' in mcu_conf:
+                mcu.communication_type = mcu.communication_type or 'can'
+                mcu.communication_id = mcu.communication_id or mcu_conf.get('canbus_uuid')
+                mcu.communication_device = mcu.communication_device or mcu_conf.get('canbus_interface', 'can0')
         pass
 
 
@@ -68,56 +78,122 @@ class KlipperMCU(object):
     """
 
     @staticmethod
-    def get_from_printer_cfg(filename: PathLike):
-        config = configparser.ConfigParser()
-        # TODO: handle the import section
-        config.read(filename)
-        mcu_sections = [x for x in config.sections() if x == 'mcu' or x.startswith('mcu ')]
-        return [KlipperMCU.from_cfg_section(x, config[x]) for x in mcu_sections]
-
-    @staticmethod
-    def from_cfg_section(section_name, cfg_section):
-        if section_name == 'mcu':
-            mcu = KlipperMCU('mcu')
-        elif section_name.startswith('mcu '):
-            mcu = KlipperMCU(section_name[4:])
+    def get_name_from_section_name(in_str: str) -> str:
+        if in_str == 'mcu':
+            return in_str
+        elif in_str.startswith('mcu '):
+            return in_str[4:]
         else:
-            raise ValueError(f"mcu cfg section with invalid name {section_name}")
-        mcu.from_klipper_config(cfg_section)
+            raise ValueError(f"Invalid MCU section name {in_str}")
+
+    @classmethod
+    def from_kqf_config(cls, name, kqf_config: 'KQFConfig'):
+        mcu = cls(name, kqf_config)
+        mcu.set_from_kqf_mcu_config(kqf_config.mcus[name])
         return mcu
 
-    def __init__(self, name):
+    def __init__(self, name, kqf_config: 'KQFConfig'):
+        self.parent = kqf_config
         self.name: str = name  # The name of the MCU in klipper's config
-        self.connection_type: Optional[str] = None  # Type of connection to the printer
-        self.connection_id: Optional[str] = None  # The immutable ID of the MCU.
-        self.connection_device: Optional[str] = None
-        self.connection_speed: Optional[str] = None
+        self.communication_type: Optional[str] = None  # Type of connection to the printer
+        self.communication_id: Optional[str] = None  # The immutable ID of the MCU.
+        self.communication_device: Optional[str] = None
+        self.communication_speed: Optional[str] = None
         self.mcu_type: Optional[str] = None  # The type of the mcu (e.g. stm32, rp2040)
         self.mcu_chip: Optional[str] = None  # The specific chip the MCU uses, used to generate args for DFU-util
         self.bootloader: Optional[str] = None  # The name of the bootloader used, None indicates chip-specific
         self.flash_method: Optional[str] = None  # The method that will be used to flash this mcu
         self.flavor: Optional[str] = None  # The name of the config 'flavor' used, this is the name of the
 
-    def from_klipper_config(self, config_block):
-        if 'serial' in config_block:
-            self.connection_type = 'serial'
-            self.connection_id = config_block['serial']
-            # TODO Use udev stuff to determine where this serial port comes from
-        elif 'can_uuid' in config_block:
-            self.connection_type = 'can'
-            self.connection_id = config_block['can_uuid']
-        else:
-            raise ValueError(f"Unable to determine MCU info for mcu '{self.name}'")
+    RE_MACHINE_TYPE = re.compile('^CONFIG_BOARD_DIRECTORY="([a-zA-Z0-9]+)"$')
+    RE_MCU = re.compile('^CONFIG_MCU="([a-zA-Z0-9]+)"$')
 
     def self_extend(self):
+        """
+        Gather information either from the local system, or make educated guesses based on other values
+        This should preferably be called exactly once, after all known values from configs have been chosen
+        """
+        # Read the machine type from the flavor
+        flavor_path = (self.parent.config_flavors_path / self.flavor).with_suffix('.config').expanduser()
+        # TODO: Gather all notable info about the flavor here, so we don't churn the file
+        if not self.mcu_type and flavor_path.is_file():
+            with flavor_path.open("r") as flavor_file:
+                for line in flavor_file.readlines():
+                    matches = KlipperMCU.RE_MACHINE_TYPE.match(line)
+                    if matches:
+                        self.mcu_type = matches[1]
+                        break
+            # No dice
+            if not self.mcu_type:
+                logging.warning(f"Could not determine machine type for flavor '{self.flavor}'")
+        # If the chip is unset, then make a decision based on kconfig and mcu type
+        if not self.mcu_chip and self.mcu_type:
+            if self.mcu_type in ['linux']:
+                self.mcu_chip = "N/A"
+            elif self.mcu_type in ['stm32']:  # TODO: Check what other types use this same method
+                with flavor_path.open("r") as flavor_file:
+                    for line in flavor_file.readlines():
+                        matches = KlipperMCU.RE_MCU.match(line)
+                        if matches:
+                            self.mcu_chip = matches[1]
+                            break
+                if not self.mcu_chip:
+                    logging.warning(f"Could not determine mcu type for flavor '{self.flavor}'")
+            else:
+                logging.warning(
+                                f"Unable to automatically determine chip type for mcu '{self.name}'"
+                                " - KQF may still function")
+        # If the canbus bitrate is not already known, guess from the interface
         if (
-                self.connection_type == 'can' and
-                self.connection_device and
-                not self.connection_speed):
-
+                self.communication_type == 'can' and
+                self.communication_device and
+                not self.communication_speed):
+            self.communication_speed = get_can_interface_bitrate(self.communication_device)
+            if not self.communication_speed:
+                logging.warning(
+                    f'Unable to automatically determine can bitrate for interface {self.communication_speed} '
+                    f'please add a "connection_speed" to the [{"mcu" if self.name == "mcu" else "mcu " + self.name}] '
+                    'config section - KQF may still function - run with DEBUG for more info')
             pass
 
         pass
+
+    def set_from_kqf_mcu_config(self, kqf_config):
+        if kqf_config.config_flavor:
+            self.flavor = kqf_config.config_flavor
+        if kqf_config.mcu_type:
+            self.mcu_type = kqf_config.mcu_type
+        if kqf_config.mcu_chip:
+            self.mcu_chip = kqf_config.mcu_chip
+        if kqf_config.communication_type:
+            self.communication_type = kqf_config.communication_type
+        if kqf_config.communication_id:
+            self.communication_id = kqf_config.communication_id
+        if kqf_config.communication_device:
+            self.communication_device = kqf_config.communication_device
+        if kqf_config.communication_speed:
+            self.communication_speed = kqf_config.communication_speed
+        if kqf_config.flash_method:
+            self.flash_method = kqf_config.flash_method
+        if kqf_config.bootloader:
+            self.bootloader = kqf_config.bootloader
+
+    def pretty_format(self):
+        return textwrap.dedent(f"""\
+            name:     '{self.name}'
+            flavor:   '{self.flavor}'
+            mcu:
+              type:   '{self.mcu_type}'
+              chip:   '{self.mcu_chip}'
+            comms:
+              type:   '{self.communication_type}'
+              id:     '{self.communication_id}'
+              device: '{self.communication_device}'
+              speed:  '{self.communication_speed if self.communication_speed is not None else "N/A"}'
+            flashing:
+              method: '{self.flash_method}'
+              loader: '{self.bootloader}' 
+        """)
 
 
 class KQFMCUConfig(object):
@@ -130,12 +206,14 @@ class KQFMCUConfig(object):
     mcu_chip: Optional[str]  # Overrides detection from KConfig flavor
     communication_type: Optional[str]  # Overrides value detected from klipper
     communication_id: Optional[str]  # Overrides value detected from klipper
+    communication_device: Optional[str]  # Overrides value detected from klipper
+    communication_speed: Optional[str]  # Overrides value detected from system configration
     bootloader: Optional[str]  # Indicates that a bootloader (other than the built-in DFU or picoboot) is present
     flash_method: Optional[str]  # Overrides value guessed from mcu_type, communication_*, and bootloader
     pass
 
     @classmethod
-    def from_config(cls, config_section):
+    def from_config(cls, config_section) -> 'KQFMCUConfig':
         obj = KQFMCUConfig()
         obj.config_flavor = config_section.get('flavor')
         if not obj.config_flavor:
@@ -144,9 +222,11 @@ class KQFMCUConfig(object):
         obj.mcu_chip = config_section.get('mcu_chip')
         obj.communication_type = config_section.get('communication_type')
         obj.communication_id = config_section.get('communication_id')
+        obj.communication_device = config_section.get('communication_device')
+        obj.communication_speed = config_section.get('communication_speed')
         obj.bootloader = config_section.get('bootloader')
         obj.flash_method = config_section.get('flash_method')
-        pass
+        return obj
 
 
 class KQFConfig(object):
@@ -159,8 +239,6 @@ class KQFConfig(object):
     _klipper_repo_path: Optional[PathLike]
     _klipper_repo_auto: bool
 
-    mcus: List[KQFMCUConfig]
-
     def __init__(self):
         self.config_flavors_path = None
         self.firmware_storage_path = None
@@ -170,6 +248,7 @@ class KQFConfig(object):
         self._klipper_repo = None
         self._klipper_repo_path = None
         self._klipper_config_auto = False
+        self._mcus = {}
 
     DEFAULT = textwrap.dedent("""\
         [KQF]
@@ -220,8 +299,9 @@ class KQFConfig(object):
     def __load_from_conf(self, conf):
         if 'KQF' not in conf.sections():
             raise ValueError("KQF section is missing from the configuration. (It's case sensitive)")
+        kqf_section = conf['KQF']
 
-        repo_path_str = conf.get('KQF', 'klipper_repo_path')
+        repo_path_str = kqf_section.get('klipper_repo_path')
         if not repo_path_str:
             raise ValueError("Klipper repo path is not specified in configuration. It is required")
         if repo_path_str == 'autodetect':
@@ -233,7 +313,7 @@ class KQFConfig(object):
         else:
             raise ValueError(f"Klipper repo path {repo_path_str} is invalid or does not exist")
 
-        config_path_str = conf.get('KQF', 'klipper_config_path')
+        config_path_str = kqf_section.get('klipper_config_path')
         if not config_path_str:
             self._klipper_config_path = None
             self._klipper_config_auto = False
@@ -245,8 +325,11 @@ class KQFConfig(object):
             self._klipper_config_auto = False
         else:
             raise ValueError(f"Klipper repo path {repo_path_str} is invalid or does not exist")
-        mcus = [KQFMCUConfig.from_config(conf[conf_section]) for conf_section in conf.sections() if
-                conf_section == 'mcu' or conf_section.startswith('mcu ')]
+
+        self.config_flavors_path = pathlib.Path(kqf_section.get('config_flavors_path', '~/.kqf/flavors')).expanduser()
+        self.mcus = {KlipperMCU.get_name_from_section_name(conf_section): KQFMCUConfig.from_config(conf[conf_section])
+                     for conf_section in conf.sections() if
+                     conf_section == 'mcu' or conf_section.startswith('mcu ')}
 
     @property
     def klipper_config(self) -> Optional[pathlib.Path]:
@@ -314,12 +397,13 @@ class KQFConfig(object):
 
 
 def get_can_interface_bitrate(ifname: str) -> Optional[str]:
+    # noinspection PyBroadException
     try:
         ipl = subprocess.run(['ip', '-details', '-json', 'link', 'show', ifname], capture_output=True, check=True)
         net_json = json.loads(ipl.stdout.decode('UTF-8'))
         bitrate = net_json[0]['linkinfo']['info_data']['bittiming']['bitrate']
-    except :
-        logging.exception(f"Unable to determine bitrate for can interface {ifname}")
+    except Exception:
+        logging.debug(f"Unable to determine bitrate for can interface {ifname}", exc_info=True)
         return None
     return bitrate
 
