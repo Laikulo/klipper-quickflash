@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import configparser
+import json
 import logging
 import pathlib
+import subprocess
 import textwrap
 from typing import Optional, List, Union
 from pprint import pprint as pp
 from os import PathLike
+import sys
 
 
 # Klipper Quick Flash
@@ -18,6 +21,10 @@ def process() -> None:
     :return: None
     """
     logging.getLogger().setLevel(logging.DEBUG)
+    if sys.version_info < (3, 7):
+        logging.fatal("Python 3.7 or greater is required")
+        sys.exit(1)
+
     kqf_conf = KQFConfig.get(path="test/kqf.cfg")
     if kqf_conf.klipper_config:
         logging.debug("Loading MCU definitions from klipper configs")
@@ -38,6 +45,21 @@ class KlipperConf(object):
 
     def mcu_names(self):
         return self.__mcu_sections.keys()
+
+    def extend_mcu(self, mcu: 'KlipperMCU'):
+        if mcu.name in self.mcu_names():
+            mcu_conf = self.__mcu_sections['mcu.name']
+            if 'serial' in mcu_conf:
+                mcu.connection_type = 'serial'
+                mcu.connection_id = mcu_conf.get('serial')
+                mcu.connection_baud = mcu_conf.get('baud','56200')
+            elif 'can_uuid' in mcu_conf:
+                mcu.connection_type = 'can'
+                mcu.connection_id = mcu_conf.get('can_uuid')
+                mcu.connection_dev = mcu_conf.get('can_interface', 'can0')
+                # TODO: Get baudrate from can interface
+            mcu.self_extend()
+        pass
 
 
 class KlipperMCU(object):
@@ -66,16 +88,15 @@ class KlipperMCU(object):
 
     def __init__(self, name):
         self.name: str = name  # The name of the MCU in klipper's config
-        self.connection_type: str  # Type of connection to the printer
-        self.connection_id: str  # The immutable ID of the MCU.
-        # Can = can uuid
-        # usb = serial number (not full path)
-        # tty = device name
-        self.mcu_type: str  # The type of the mcu (e.g. stm32, rp2040)
-        self.mcu_chip: Optional[str]  # The specific chip the MCU uses, used to generate args for DFU-util
-        self.bootloader: Optional[str]  # The name of the bootloader used, None indicates chip-specific
-        self.flash_method: str  # The method that will be used to flash this mcu
-        self.flavor: str  # The name of the config 'flavor' used, this is the name of the
+        self.connection_type: Optional[str] = None  # Type of connection to the printer
+        self.connection_id: Optional[str] = None  # The immutable ID of the MCU.
+        self.connection_device: Optional[str] = None
+        self.connection_speed: Optional[str] = None
+        self.mcu_type: Optional[str] = None  # The type of the mcu (e.g. stm32, rp2040)
+        self.mcu_chip: Optional[str] = None  # The specific chip the MCU uses, used to generate args for DFU-util
+        self.bootloader: Optional[str] = None  # The name of the bootloader used, None indicates chip-specific
+        self.flash_method: Optional[str] = None  # The method that will be used to flash this mcu
+        self.flavor: Optional[str] = None  # The name of the config 'flavor' used, this is the name of the
 
     def from_klipper_config(self, config_block):
         if 'serial' in config_block:
@@ -87,6 +108,16 @@ class KlipperMCU(object):
             self.connection_id = config_block['can_uuid']
         else:
             raise ValueError(f"Unable to determine MCU info for mcu '{self.name}'")
+
+    def self_extend(self):
+        if (
+                self.connection_type == 'can' and
+                self.connection_device and
+                not self.connection_speed):
+
+            pass
+
+        pass
 
 
 class KQFMCUConfig(object):
@@ -280,6 +311,17 @@ class KQFConfig(object):
                 return path
         raise ValueError(
             "Could not autodetect klipper config location")
+
+
+def get_can_interface_bitrate(ifname: str) -> Optional[str]:
+    try:
+        ipl = subprocess.run(['ip', '-details', '-json', 'link', 'show', ifname], capture_output=True, check=True)
+        net_json = json.loads(ipl.stdout.decode('UTF-8'))
+        bitrate = net_json[0]['linkinfo']['info_data']['bittiming']['bitrate']
+    except :
+        logging.exception(f"Unable to determine bitrate for can interface {ifname}")
+        return None
+    return bitrate
 
 
 if __name__ == '__main__':
