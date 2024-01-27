@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 import argparse
 import configparser
+import contextlib
 import json
 import logging
+import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
+from datetime import datetime
 from os import PathLike
-from typing import Optional
+from typing import Optional, Callable, Union
 
 
 # Klipper Quick Flash
@@ -21,20 +25,34 @@ def entrypoint() -> None:
         logging.fatal("Python 3.7 or greater is required")
         sys.exit(1)
 
+    logging.basicConfig()
+    kqf_log = logging.getLogger('kqf')
+    kqf_log.setLevel(logging.INFO)
+
     ap = argparse.ArgumentParser()
     ap.add_argument('-v', action='store_true', help="Enable verbose output")
     ap.add_argument("-c", metavar="CONFIG_FILE", help="Config file to use", default="~/.kqf/kqf.cfg")
     ap.set_defaults(cmd_action=None)
 
     commands = ap.add_subparsers(metavar='ACTION', help="The action to perform")
-    c_dump_mcu = commands.add_parser(name="dump_mcu", help="Prints information about discovered MCUs, mainly for debugging")
-    c_dump_mcu.set_defaults(cmd_action=cmd_dump_mcu)
+
+    add_cmd(commands, 'dump_mcu', cmd_dump_mcu, help="Prints info about MCUs, for debugging")
+
+    menuconfig_cmd = add_cmd(commands, 'menuconfig', cmd_menuconfig, help="Launch menuconfig for a flavor")
+    menuconfig_cmd.add_argument('flavor', metavar='FLAVOR', help="The flavor to run menuconfig for")
+    menuconfig_cmd.add_argument('--build', action='store_true', default=False, help="Build firmware after configuring")
+
+    build_cmd = add_cmd(commands, 'build', cmd_build, help="Build firmware for a flavor")
+    build_flavor_spec = build_cmd.add_mutually_exclusive_group(required=True)
+    build_flavor_spec.add_argument('flavor', metavar='FLAVOR', help="The flavor to build firmware for", nargs='?'),
+    build_flavor_spec.add_argument('--all', dest='build_all', action='store_true', help="Build all")
 
     args = ap.parse_args()
 
     logging.basicConfig()
     if args.v:
         logging.getLogger().setLevel(logging.DEBUG)
+        kqf_log.setLevel(logging.DEBUG)
 
     kqf = KQF(config_path=args.c)
 
@@ -45,10 +63,37 @@ def entrypoint() -> None:
         ap.print_help()
 
 
+def add_cmd(sp, name: str, act: Callable, *args, **kwargs):
+    command = sp.add_parser(name=name, *args, **kwargs)
+    command.set_defaults(cmd_action=act)
+    return command
 
-def cmd_dump_mcu(kqf, args):
+
+def cmd_dump_mcu(kqf, _):
     kqf.inventory()
     kqf.dump_mcu_info()
+
+
+def cmd_menuconfig(kqf: 'KQF', args):
+    with KQFFlavor(kqf, kqf.config, args.flavor) as flavor:
+        kqf.menuconfig(flavor)
+        if args.build:
+            kqf.build(flavor)
+
+
+def cmd_build(kqf: 'KQF', args):
+    if args.build_all:
+        # TODO get list of all flavors
+        flavors = set(KQFFlavor.list_existing(kqf))
+    else:
+        flavors = {args.flavor}
+    flavor_success = set()
+    for flavor in flavors:
+        if kqf.build(flavor):
+            flavor_success.add(flavor)
+    print(
+            f"Successful Flavors: {','.join(flavor_success)}\n"
+            f"Failed Flavors: {','.join(flavors - flavor_success)}")
 
 
 class KlipperConf(object):
@@ -230,7 +275,7 @@ class KQFMCUConfig(object):
         obj = KQFMCUConfig()
         obj.config_flavor = config_section.get('flavor')
         if not obj.config_flavor:
-            raise ValueError("MCU firmware flavor not specified, try making one with 'kqf menuconfig'")
+            logging.warning(f"There is no flavor defined for [{config_section.name}].")
         obj.mcu_type = config_section.get('mcu_type')
         obj.mcu_chip = config_section.get('mcu_chip')
         obj.communication_type = config_section.get('communication_type')
@@ -414,30 +459,143 @@ class KQF(object):
     Program state and other such
     """
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, logger=logging.getLogger()):
+        self._logger = logger
         self._config = KQFConfig.get(config_path)
         self._mcus = {s: KlipperMCU.from_kqf_config(s, self._config) for s in self._config.mcus.keys()}
+
+    def _log(self, *args, **kwargs):
+        self._logger.log(*args, **kwargs)
+
+    @property
+    def logger(self):
+        return self._logger
+
+    @property
+    def config(self):
+        return self._config
+
+    def flavor_path(self, flavor: str) -> pathlib.Path:
+        return (self._config.config_flavors_path / flavor).with_suffix('.conf')
 
     def dump_mcu_info(self):
         mcu_info_log = logging.getLogger('kqf.mcu_info')
         mcu_info_log.setLevel(logging.INFO)
         mcu_info_log.log(logging.INFO,
-                    "\n" + "---\n".join([self._mcus[m].pretty_format() for m in self._mcus]) + "---")
+                         "\n" + "---\n".join([self._mcus[m].pretty_format() for m in self._mcus]) + "---")
 
     def inventory(self, self_extend: bool = True):
         if self._config.klipper_config:
-            logging.debug("Loading MCU definitions from klipper configs")
+            self._logger.debug("Loading MCU definitions from klipper configs")
             klipper_conf = KlipperConf(self._config.klipper_config)
-            logging.debug(
+            self._logger.debug(
                 f"Loaded {len(klipper_conf.mcu_names())} MCUs definitions from Klipper: "
                 f"[{', '.join(klipper_conf.mcu_names())}]")
-            logging.debug('Augmenting mcu configs from klipper config')
+            self._logger.debug('Augmenting mcu configs from klipper config')
             for mcu_name in self._mcus.keys() & klipper_conf.mcu_names():
-                logging.debug(f'Augmenting {mcu_name} with klipper config')
+                self._logger.debug(f'Augmenting {mcu_name} with klipper config')
                 klipper_conf.extend_mcu(self._mcus[mcu_name])
         if self_extend:
             for mcu in self._mcus:
                 self._mcus[mcu].self_extend()
+
+    def flavor_exists(self, flavor):
+        return self.flavor_path(flavor).is_file()
+
+    def menuconfig(self, flavor: Union[str, 'KQFFlavor']):
+        if isinstance(flavor, str):
+            flavor = KQFFlavor(self, self.config, flavor)
+            ctx = flavor
+        elif isinstance(flavor, KQFFlavor):
+            ctx = contextlib.nullcontext()
+        else:
+            raise ValueError("Invalid flavor")
+        with ctx:
+            subprocess.run(['make', 'clean', 'menuconfig'], cwd=self._config.klipper_repo, check=True)
+
+    def build(self, flavor: Union[str, 'KQFFlavor']) -> bool:
+        if isinstance(flavor, str):
+            flavor = KQFFlavor(self, self.config, flavor)
+            ctx = flavor
+        elif isinstance(flavor, KQFFlavor):
+            ctx = contextlib.nullcontext()
+        else:
+            raise ValueError("Invalid flavor")
+        with ctx:
+            # noinspection PyBroadException
+            try:
+                subprocess.run(['make', 'clean'], cwd=self._config.klipper_repo, check=True)
+                subprocess.run(['make', 'all'], cwd=self._config.klipper_repo, check=True)
+                return True
+            except Exception:
+                self.logger.exception(f'An error occurred when building {flavor.name}')
+                return False
+
+
+
+class KQFFlavor(object):
+    ACTIVE_FLAVOR = None
+
+    @staticmethod
+    def list_existing(kqf: KQF):
+        flavor_path = kqf.config.config_flavors_path
+        if not flavor_path.is_dir():
+            return []
+        else:
+            return [f.stem for f in flavor_path.iterdir() if f.is_file() and f.suffix == ".config"]
+
+    def __init__(self, kqf: KQF, kqf_config: KQFConfig, name: str, must_exist: bool = False):
+        self._parent = kqf
+        self._flavor = name
+        self._config = kqf_config
+        self.__kconfig_path = self._config.klipper_repo / '.config'
+        if must_exist and not self.exists():
+            raise ValueError(f"kConfig for flavor '{name}' does not exist, try running 'menuconfig {name}'")
+
+    def exists(self) -> bool:
+        return self.path.exists()
+
+    @property
+    def name(self) -> str:
+        return self._flavor
+
+    @property
+    def path(self) -> pathlib.Path:
+        return (self._config.config_flavors_path / self._flavor).with_suffix('.config')
+
+    def __enter__(self):
+        if KQFFlavor.ACTIVE_FLAVOR:
+            if KQFFlavor.ACTIVE_FLAVOR == self:
+                # This flavor is already active, so this is a no-op
+                return
+            else:
+                raise RuntimeError("Tried to activate a flavor while one was still in use")
+        KQFFlavor.ACTIVE_FLAVOR = self
+
+        if self.__kconfig_path.is_file():
+            self._parent.logger.warning("kConfig file already exists")
+            kconfig_modified_time = datetime.fromtimestamp(self.__kconfig_path.stat().st_mtime)
+            kconfig_modified_time_slug = kconfig_modified_time.strftime("%Y%m%dT%H%M")
+            kconfig_backup_time_slug = datetime.now().strftime("%Y%m%dT%H%M")
+            backup_suffix = f'-mod_{kconfig_modified_time_slug}-saved_-{kconfig_backup_time_slug}-{os.getpid()}.bak'
+            backup_path = self.__kconfig_path.with_name(self.__kconfig_path.name + backup_suffix)
+            self._parent.logger.info(f"Renaming previous kConfig (last modified at {kconfig_modified_time_slug}:")
+            self._parent.logger.info(f"{self.__kconfig_path.absolute()} -> {backup_path.absolute()}")
+            shutil.move(self.__kconfig_path, backup_path)
+
+        if self.exists():
+            shutil.copy(self.path, self.__kconfig_path)
+            subprocess.run(['make', 'olddefconfig'], cwd=self._config.klipper_repo)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self._config.config_flavors_path.exists():
+            self._parent.logger.info(f"Created flavor directory at {self._config.config_flavors_path.absolute()}")
+            self._config.config_flavors_path.mkdir(exist_ok=True, parents=True)
+        if self.__kconfig_path.exists():
+            shutil.move(self.__kconfig_path, self.path)
+            self._parent.logger.info(f"Saved kConfig for flavor '{self._flavor}'")
+        KQFFlavor.ACTIVE_FLAVOR = None
 
 
 def get_can_interface_bitrate(ifname: str) -> Optional[str]:
