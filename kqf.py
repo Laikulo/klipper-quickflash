@@ -13,12 +13,12 @@ import sys
 import textwrap
 from datetime import datetime
 from os import PathLike
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Dict
 
 
 # Klipper Quick Flash
 # This tool uses information gathered from a klipper config file, as well as from its own config
-# to automate building and flashing MCUs with klipper.
+# to automate building and flashing MCUs with klipper
 
 def entrypoint() -> None:
     if sys.version_info < (3, 7):
@@ -36,7 +36,7 @@ def entrypoint() -> None:
 
     commands = ap.add_subparsers(metavar='ACTION', help="The action to perform")
 
-    add_cmd(commands, 'dump_mcu', cmd_dump_mcu, help="Prints info about MCUs, for debugging")
+    add_cmd(commands, 'mcu_info', cmd_dump_mcu, help="Prints info about MCUs, for debugging")
 
     menuconfig_cmd = add_cmd(commands, 'menuconfig', cmd_menuconfig, help="Launch menuconfig for a flavor")
     menuconfig_cmd.add_argument('flavor', metavar='FLAVOR', help="The flavor to run menuconfig for")
@@ -47,6 +47,11 @@ def entrypoint() -> None:
     build_flavor_spec.add_argument('flavor', metavar='FLAVOR', help="The flavor to build firmware for", nargs='?'),
     build_flavor_spec.add_argument('--all', dest='build_all', action='store_true', help="Build all")
 
+    flash_cmd = add_cmd(commands, 'flash', cmd_flash, help="Flash to a given MCU")
+    flash_flavor_spec = flash_cmd.add_mutually_exclusive_group(required=True)
+    flash_flavor_spec.add_argument('mcu', metavar='MCU', help="the mcu to flash", nargs='?'),
+    flash_flavor_spec.add_argument('--all', dest='flash_all', action='store_true', help="Build all")
+
     args = ap.parse_args()
 
     logging.basicConfig()
@@ -54,7 +59,7 @@ def entrypoint() -> None:
         logging.getLogger().setLevel(logging.DEBUG)
         kqf_log.setLevel(logging.DEBUG)
 
-    kqf = KQF(config_path=args.c)
+    kqf = KQF(config_path=args.c, logger=kqf_log)
 
     if args.cmd_action:
         args.cmd_action(kqf, args)
@@ -83,7 +88,6 @@ def cmd_menuconfig(kqf: 'KQF', args):
 
 def cmd_build(kqf: 'KQF', args):
     if args.build_all:
-        # TODO get list of all flavors
         flavors = set(KQFFlavor.list_existing(kqf))
     else:
         flavors = {args.flavor}
@@ -92,8 +96,21 @@ def cmd_build(kqf: 'KQF', args):
         if kqf.build(flavor):
             flavor_success.add(flavor)
     print(
-            f"Successful Flavors: {','.join(flavor_success)}\n"
-            f"Failed Flavors: {','.join(flavors - flavor_success)}")
+        f"Successful Flavors: {','.join(flavor_success)}\n"
+        f"Failed Flavors: {','.join(flavors - flavor_success)}")
+
+
+def cmd_flash(kqf: 'KQF', args):
+    kqf.inventory()
+    if args.flash_all:
+        mcus_to_flash = kqf.list_mcus()
+    else:
+        mcus_to_flash = [args.mcu]
+    for mcu_name in mcus_to_flash:
+        mcu = kqf.get_mcu(mcu_name)
+        if not mcu:
+            raise ValueError(f"The MCU configuration '{mcu_name}' could not be found, check the KQF configuration")
+        kqf.flash(mcu)
 
 
 class KlipperConf(object):
@@ -155,6 +172,7 @@ class KlipperMCU(object):
         self.mcu_chip: Optional[str] = None  # The specific chip the MCU uses, used to generate args for DFU-util
         self.bootloader: Optional[str] = None  # The name of the bootloader used, None indicates chip-specific
         self.flash_method: Optional[str] = None  # The method that will be used to flash this mcu
+        self.flash_opts: Dict[str, str] = {}  # This dict contains flash/bootloader specific options
         self.flavor: Optional[str] = None  # The name of the config 'flavor' used, this is the name of the
 
     RE_MACHINE_TYPE = re.compile('^CONFIG_BOARD_DIRECTORY="([a-zA-Z0-9]+)"$')
@@ -182,7 +200,6 @@ class KlipperMCU(object):
                     if type_matches:
                         flavor_mcu_chip = type_matches[1]
                         continue
-        # TODO: Gather all notable info about the flavor here, so we don't churn the file
         if not self.mcu_type:
             if flavor_mcu_type:
                 self.mcu_type = flavor_mcu_type
@@ -235,23 +252,33 @@ class KlipperMCU(object):
             self.flash_method = kqf_config.flash_method
         if kqf_config.bootloader:
             self.bootloader = kqf_config.bootloader
+        self.flash_opts = {**self.flash_opts, **kqf_config.flash_opts}
+        if len(kqf_config.flash_opts) > 0 and not kqf_config.flash_method:
+            logging.warning(f"config: mcu '{self.name}': Flash options specified without specifying the method. This "
+                            f"is unsafe. Please specify method")
 
     def pretty_format(self):
-        return textwrap.dedent(f"""\
-            name:     '{self.name}'
-            flavor:   '{self.flavor}'
-            mcu:
-              type:   '{self.mcu_type}'
-              chip:   '{self.mcu_chip}'
-            comms:
-              type:   '{self.communication_type}'
-              id:     '{self.communication_id}'
-              device: '{self.communication_device}'
-              speed:  '{self.communication_speed if self.communication_speed is not None else "N/A"}'
-            flashing:
-              method: '{self.flash_method}'
-              loader: '{self.bootloader}' 
-        """)
+        if len(self.flash_opts) > 0:
+            opt_listing = (os.linesep + " " * 4).join([f"{opt}: {self.flash_opts[opt]}" for opt in self.flash_opts])
+            opt_str = os.linesep + " " * 4 + opt_listing
+        else:
+            opt_str = ""
+        return f"""\
+name:      '{self.name}'
+flavor:    '{self.flavor}'
+mcu:
+  type:    '{self.mcu_type}'
+  chip:    '{self.mcu_chip}'
+comms:
+  type:    '{self.communication_type}'
+  id:      '{self.communication_id}'
+  device:  '{self.communication_device}'
+  speed:   '{self.communication_speed if self.communication_speed is not None else "N/A"}'
+flashing:
+  method:  '{self.flash_method}'
+  options:{opt_str}
+  loader:  '{self.bootloader}' 
+        """
 
 
 class KQFMCUConfig(object):
@@ -268,6 +295,7 @@ class KQFMCUConfig(object):
     communication_speed: Optional[str]  # Overrides value detected from system configration
     bootloader: Optional[str]  # Indicates that a bootloader (other than the built-in DFU or picoboot) is present
     flash_method: Optional[str]  # Overrides value guessed from mcu_type, communication_*, and bootloader
+    flash_opts: Optional[str]  # Overrides individual values for flash configuration
     pass
 
     @classmethod
@@ -284,6 +312,8 @@ class KQFMCUConfig(object):
         obj.communication_speed = config_section.get('communication_speed')
         obj.bootloader = config_section.get('bootloader')
         obj.flash_method = config_section.get('flash_method')
+        obj.flash_opts = {opt[6:]: config_section[opt] for opt in config_section if
+                          opt.startswith('flash_') and opt != 'flash_method'}
         return obj
 
 
@@ -385,6 +415,8 @@ class KQFConfig(object):
             raise ValueError(f"Klipper repo path {repo_path_str} is invalid or does not exist")
 
         self.config_flavors_path = pathlib.Path(kqf_section.get('config_flavors_path', '~/.kqf/flavors')).expanduser()
+        self.firmware_storage_path = pathlib.Path(
+            kqf_section.get('firmware_storage_path', '~/.kqf/firmware')).expanduser()
         self.mcus = {KlipperMCU.get_name_from_section_name(conf_section): KQFMCUConfig.from_config(conf[conf_section])
                      for conf_section in conf.sections() if
                      conf_section == 'mcu' or conf_section.startswith('mcu ')}
@@ -524,13 +556,116 @@ class KQF(object):
         with ctx:
             # noinspection PyBroadException
             try:
+                # Note: Klipper does not handle `make clean all` properly
+                # TODO: Check if klipper implements distclean, and if that should be done instead
                 subprocess.run(['make', 'clean'], cwd=self._config.klipper_repo, check=True)
                 subprocess.run(['make', 'all'], cwd=self._config.klipper_repo, check=True)
+                firmware_path = flavor.firmware_path('latest')  # TODO: make this a parameter
+                firmware_path.mkdir(parents=True, exist_ok=True)
+                for f in (self._config.klipper_repo / 'out').iterdir():
+                    if f.stem == "klipper":
+                        self.logger.debug(
+                            f"Archiving firmware artifact {f.absolute()} to {(firmware_path / f.name).absolute()}")
+                        shutil.copy(f, firmware_path / f.name)
                 return True
             except Exception:
                 self.logger.exception(f'An error occurred when building {flavor.name}')
                 return False
 
+    def flash(self, mcu: KlipperMCU, ver: str = 'latest'):
+        if not mcu.flash_method:
+            raise ValueError(f"Flashing method for mcu {mcu.name} could not be automatically determined."
+                             "Please add it to the KQF config")
+        # Check that latest firmware exists
+        flavor = KQFFlavor(self, self._config, mcu.flavor)
+        fw_path = flavor.firmware_path(ver)
+        if not fw_path.exists():
+            raise ValueError(
+                f'Firmware version "{ver}" does not exist for flavor "{flavor}" as required by mcu "{mcu.name}"')
+        if mcu.flash_method == 'make':
+            self.logger.info(
+                f"Flashing {mcu.name} with flavor {flavor.name} to version {ver} with method {mcu.flash_method}")
+            self.flash_make(mcu, ver, opts=mcu.flash_opts)
+        pass
+
+    def flash_make(self, mcu, ver: str, opts: Optional[Dict[str, str]] = None):
+        flavor = KQFFlavor(self, self._config, mcu.flavor)
+        with flavor:
+            flavor.restore_artifacts(ver)
+            if not (self._config.klipper_repo / 'out' / 'klipper.elf').exists():
+                raise ValueError(f"Previously-compiled klipper is missing klipper.elf for flavor {flavor}")
+            make_args = [
+                'make',
+                '--old-file=out/klipper.elf'  # Prevent klipper from rebuilding when flashing
+            ]
+            if opts.get('debug'):
+                make_args.append("-d")
+            make_args += [opts[var] for var in opts if var.startswith('var_')]
+            make_args.append(opts.get('target', 'flash'))
+            subprocess.run(make_args, cwd=self._config.klipper_repo, check=True)
+
+
+    KATAPULT_FLASHTOOL_URL = "https://raw.githubusercontent.com/Arksine/katapult/master/scripts/flashtool.py"
+    def flash_katapult(self, mcu: KlipperMCU, ver: str, opts: Optional[Dict[str, str]] = None):
+        flash_can_script = self._config.klipper_repo / 'lib' / 'canboot' / 'flash_can.py'
+        if not flash_can_script.exists():
+            raise ValueError("flash_can script is missing from klipper repo")
+        environ = os.environ
+        args = []
+        interp: Optional[str] = None
+        if 'venv' in opts:
+            venv_dir = pathlib.Path(opts['venv']).expanduser()
+            interp = str((venv_dir / 'bin' / 'python3').absolute())
+            environ['VIRTUAL_ENV'] = str(venv_dir.absolute())
+        if 'interpreter' in opts:
+            interp = args.append(opts['interpreter'])
+        if interp:
+            args.append(interp)
+        args.append(flash_can_script)
+
+        katapult_mode = opts.get('mode', 'can')
+
+        # Ideally, we'd use the MCU comms settings to request a reboot, and then attempt to locate the katapult device
+        # However, the flash_can in klipper is too old to do that.
+
+        if katapult_mode == 'can':
+            args += [
+                '-i',
+                opts.get('interface', mcu.communication_device),
+                '-u',
+                opts.get('uuid', mcu.communication_id)
+            ]
+        elif katapult_mode == 'usb_serial':
+            args += [
+                '-d',
+                opts.get('serial',
+                         f'/dev/serial/by-id/'
+                         f'usb-{opts.get("usb_product", "katapult")}_'
+                         f'{mcu.mcu_chip, opts.get("usb_id", mcu.communication_id)}-if00'),
+                '-b',
+                opts.get('serial_baud', mcu.communication_speed)
+            ]
+        elif katapult_mode == 'uart':
+            args += [
+                '-d',
+                opts.get('serial', mcu.communication_device),
+                '-b',
+                opts.get('serial_baud', mcu.communication_speed)
+            ]
+        else:
+            raise ValueError(f"Katapult mode {katapult_mode} invalid.")
+
+        if opts.get('verbose'):
+            args.append(['-v'])
+
+    def list_mcus(self):
+        return self._mcus.keys()
+
+    def get_mcu(self, mcu_name):
+        try:
+            return self._mcus[mcu_name]
+        except KeyError:
+            return None
 
 
 class KQFFlavor(object):
@@ -563,7 +698,18 @@ class KQFFlavor(object):
     def path(self) -> pathlib.Path:
         return (self._config.config_flavors_path / self._flavor).with_suffix('.config')
 
+    def firmware_path(self, ver: Optional[str] = None):
+        if ver:
+            return self._config.firmware_storage_path / self._flavor / ver
+        else:
+            return self._config.firmware_storage_path / self._flavor
+
+    def list_firmware_versions(self):
+        if self.firmware_path().is_dir():
+            return [f.name for f in self.firmware_path().iterdir() if (f / 'klipper.dict').is_file()]
+
     def __enter__(self):
+        self._parent.logger.debug(f"activating flavor {self.name}")
         if KQFFlavor.ACTIVE_FLAVOR:
             if KQFFlavor.ACTIVE_FLAVOR == self:
                 # This flavor is already active, so this is a no-op
@@ -583,9 +729,13 @@ class KQFFlavor(object):
             self._parent.logger.info(f"{self.__kconfig_path.absolute()} -> {backup_path.absolute()}")
             shutil.move(self.__kconfig_path, backup_path)
 
+        self._parent.logger.debug("cleaning workspace")
+        subprocess.run(['make', 'clean'], cwd=self._config.klipper_repo, capture_output=True)
         if self.exists():
+            self._parent.logger.debug(f"loading .config for flavor {self.name}")
             shutil.copy(self.path, self.__kconfig_path)
-            subprocess.run(['make', 'olddefconfig'], cwd=self._config.klipper_repo)
+            self._parent.logger.debug('running olddefconfig')
+            subprocess.run(['make', 'olddefconfig'], cwd=self._config.klipper_repo, capture_output=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -594,8 +744,15 @@ class KQFFlavor(object):
             self._config.config_flavors_path.mkdir(exist_ok=True, parents=True)
         if self.__kconfig_path.exists():
             shutil.move(self.__kconfig_path, self.path)
-            self._parent.logger.info(f"Saved kConfig for flavor '{self._flavor}'")
+            self._parent.logger.debug(f"Saved kConfig for flavor '{self._flavor}'")
+        subprocess.run(['make', 'distclean'], cwd=self._config.klipper_repo, capture_output=True)
         KQFFlavor.ACTIVE_FLAVOR = None
+
+    def restore_artifacts(self, ver):
+        for f in self.firmware_path(ver).iterdir():
+            if f.stem == 'klipper':
+                self._parent.logger.debug(f"Restoring artifact {f}")
+                shutil.copy(f, self._config.klipper_repo / 'out' / f.name)
 
 
 def get_can_interface_bitrate(ifname: str) -> Optional[str]:
