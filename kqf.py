@@ -57,6 +57,9 @@ def entrypoint() -> None:
     flash_flavor_spec = flash_cmd.add_mutually_exclusive_group(required=True)
     flash_flavor_spec.add_argument('mcu', metavar='MCU', help="the mcu to flash", nargs='?'),
     flash_flavor_spec.add_argument('--all', dest='flash_all', action='store_true', help="Build all")
+    flash_cmd.add_argument(
+                            "--build", dest='build_before_flash', action='store_true',
+                            help="Build firmware for mcus before flashing")
 
     args = ap.parse_args()
 
@@ -109,10 +112,18 @@ def cmd_build(kqf: 'KQF', args):
 def cmd_flash(kqf: 'KQF', args):
     kqf.inventory()
     if args.flash_all:
-        mcus_to_flash = kqf.list_mcus()
+        mcu_names_to_flash = kqf.list_mcus()
     else:
-        mcus_to_flash = [args.mcu]
-    for mcu_name in mcus_to_flash:
+        mcu_names_to_flash = [args.mcu]
+    mcus_to_flash = [kqf.get_mcu(mcu_name) for mcu_name in mcu_names_to_flash]
+    if args.build_before_flash:
+        flavors_to_build = set(mcu.flavor for mcu in mcus_to_flash)
+        kqf.logger.info(f'Building flavors: {flavors_to_build}')
+        for flavor in flavors_to_build:
+            flavor_success = kqf.build(flavor)
+            if not flavors_to_build:
+                raise RuntimeError("Unable to build flavor {flavor}, aborting auto-build-and-flash")
+    for mcu_name in mcu_names_to_flash:
         mcu = kqf.get_mcu(mcu_name)
         if not mcu:
             raise ValueError(f"The MCU configuration '{mcu_name}' could not be found, check the KQF configuration")
