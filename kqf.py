@@ -2,15 +2,21 @@
 import argparse
 import configparser
 import contextlib
+import ctypes
+import fcntl
 import json
 import logging
 import os
 import pathlib
 import re
 import shutil
+import struct
 import subprocess
 import sys
+import termios
 import textwrap
+import time
+import urllib.request
 from datetime import datetime
 from os import PathLike
 from typing import Optional, Callable, Union, Dict
@@ -582,14 +588,96 @@ class KQF(object):
         if not fw_path.exists():
             raise ValueError(
                 f'Firmware version "{ver}" does not exist for flavor "{flavor}" as required by mcu "{mcu.name}"')
+        if 'entry_mode' in mcu.flash_opts:
+            self.logger.debug(f"Preparing to enter bootloader on {mcu.name}")
+            self.enter_bootloader(mcu)
+        self.logger.info(f"Flashing {mcu.name} with flavor {flavor.name} to version {ver} with method {mcu.flash_method}")
         if mcu.flash_method == 'make':
-            self.logger.info(
-                f"Flashing {mcu.name} with flavor {flavor.name} to version {ver} with method {mcu.flash_method}")
-            self.flash_make(mcu, ver, opts=mcu.flash_opts)
+            self.flash_make(mcu, ver)
+        elif mcu.flash_method == 'katapult':
+            self.flash_katapult(mcu, ver)
+        elif mcu.flash_method == 'none':
+            logging.info('NOOP - Flash mode \'none\'')
+        else:
+            raise ValueError(f'Invalid flash method {mcu.flash_method} for mcu {mcu.name}')
         pass
 
-    def flash_make(self, mcu, ver: str, opts: Optional[Dict[str, str]] = None):
+    def enter_bootloader(self, mcu: KlipperMCU):
+        entry_method = mcu.flash_opts.get("entry_mode")
+        if entry_method == 'usb_serial':
+            # Open the serial port at 1200 baud, and send a DTR pulse
+            serial_path = pathlib.Path(mcu.flash_opts.get('entry_serial',
+                                             f'/dev/serial/by-id/'
+                                             f'usb-{mcu.flash_opts.get("entry_usb_product", "Klipper")}_'
+                                             f'{mcu.mcu_chip}_{mcu.flash_opts.get("entry_usb_id", mcu.communication_id)}'
+                                             '-if00'))
+            if not serial_path.exists():
+                raise ValueError(f"Serial port {serial_path} does not exist for rebooting into bootloader")
+
+            with serial_path.open("ab+", buffering=0) as serial_port:
+                delay = 0.1
+                post_delay = 2
+                file_no = serial_port.fileno()
+                attrs = termios.tcgetattr(file_no)
+                self.logger.debug("Setting baud to 1200")
+                attrs[4] = attrs[5] = termios.B1200
+                self.logger.debug("Disabling automatic flow control")
+                attrs[2] &= ~termios.CRTSCTS
+                termios.tcsetattr(file_no, termios.TCSADRAIN, attrs)
+                termios.tcdrain(file_no)
+                time.sleep(0.250)  # Time to let the baud rate switch take effect
+                serial_status = ctypes.c_int()
+                fcntl.ioctl(file_no, termios.TIOCMGET, serial_status)
+                dtr = struct.pack('I', termios.TIOCM_DTR)
+                try:
+                    if not serial_status.value & termios.TIOCM_DTR:
+                        self.logger.debug("DTR OFF")
+                        fcntl.ioctl(file_no, termios.TIOCMBIC, dtr)
+                        termios.tcdrain(file_no)
+                        time.sleep(delay)
+                    # DTR is on at this point
+                    self.logger.debug("DTR ON")
+                    fcntl.ioctl(file_no, termios.TIOCMBIS, dtr)
+                    termios.tcdrain(file_no)
+                    time.sleep(delay)
+                    # Turn DTR back on
+                    self.logger.debug("DTR OFF")
+                    fcntl.ioctl(file_no, termios.TIOCMBIC, dtr)
+                    termios.tcdrain(file_no)
+                    time.sleep(delay)
+                    termios.tcdrain(file_no)
+                except (BrokenPipeError, termios.error):
+                    self.logger.debug("Device has disconnected, assuming reboot in progress")
+                self.logger.debug("Waiting for reboot")
+                time.sleep(post_delay)
+        elif entry_method == 'serial':
+            serial_path = pathlib.Path(mcu.flash_opts.get('entry_serial',
+                                                          mcu.flash_opts.get('serial', mcu.communication_device)))
+            # Get the constant from the termios module
+            baud_c = getattr(termios,
+                             f'B{mcu.flash_opts.get("entry_baud", mcu.flash_opts.get("baud",mcu.communication_speed))}')
+            with serial_path.open("ab+") as serial_port:
+                file_no = serial_port.fileno()
+                old_attrs = termios.tcgetattr(file_no)
+                attrs = old_attrs.copy()
+                attrs[4] = attrs[5] = baud_c
+                termios.tcsetattr(file_no, termios.TCSADRAIN, attrs)
+                termios.tcdrain(file_no)
+
+                serial_port.write(b"~ \x1c Request Serial Bootloader!! ~")
+                termios.tcdrain(file_no)
+
+                # Reset the terminal to old baud
+                termios.tcsetattr(file_no, termios.TCSADRAIN, old_attrs)
+                termios.tcdrain(file_no)
+        elif entry_method == 'can':
+            raise NotImplementedError
+        else:
+            raise ValueError(f"Unknown bootloader entry method: {entry_method}")
+
+    def flash_make(self, mcu, ver: str):
         flavor = KQFFlavor(self, self._config, mcu.flavor)
+        opts = mcu.flash_opts
         with flavor:
             flavor.restore_artifacts(ver)
             if not (self._config.klipper_repo / 'out' / 'klipper.elf').exists():
@@ -604,12 +692,21 @@ class KQF(object):
             make_args.append(opts.get('target', 'flash'))
             subprocess.run(make_args, cwd=self._config.klipper_repo, check=True)
 
-
     KATAPULT_FLASHTOOL_URL = "https://raw.githubusercontent.com/Arksine/katapult/master/scripts/flashtool.py"
-    def flash_katapult(self, mcu: KlipperMCU, ver: str, opts: Optional[Dict[str, str]] = None):
-        flash_can_script = self._config.klipper_repo / 'lib' / 'canboot' / 'flash_can.py'
+
+    def flash_katapult(self, mcu: KlipperMCU, ver: str):
+        flash_can_script = pathlib.Path("~/.kqf/lib/flashtool.py").expanduser()
+        opts = mcu.flash_opts
         if not flash_can_script.exists():
-            raise ValueError("flash_can script is missing from klipper repo")
+            logging.debug(f"Downloaded katapult flashtool from {KQF.KATAPULT_FLASHTOOL_URL}")
+            flash_can_script.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(KQF.KATAPULT_FLASHTOOL_URL, flash_can_script)
+
+        cur_mode = flash_can_script.stat().st_mode
+        if not cur_mode & 0o111 == 0o111:
+            logging.debug(f"Marked flashtool as excecutable")
+            flash_can_script.chmod(cur_mode | 0o111)
+
         environ = os.environ
         args = []
         interp: Optional[str] = None
@@ -621,13 +718,12 @@ class KQF(object):
             interp = args.append(opts['interpreter'])
         if interp:
             args.append(interp)
+
         args.append(flash_can_script)
 
         katapult_mode = opts.get('mode', 'can')
 
-        # Ideally, we'd use the MCU comms settings to request a reboot, and then attempt to locate the katapult device
-        # However, the flash_can in klipper is too old to do that.
-
+        logging.debug(f'Katapult flash in {katapult_mode} mode')
         if katapult_mode == 'can':
             args += [
                 '-i',
@@ -641,7 +737,7 @@ class KQF(object):
                 opts.get('serial',
                          f'/dev/serial/by-id/'
                          f'usb-{opts.get("usb_product", "katapult")}_'
-                         f'{mcu.mcu_chip, opts.get("usb_id", mcu.communication_id)}-if00'),
+                         f'{mcu.mcu_chip}_{opts.get("usb_id", mcu.communication_id)}-if00'),
                 '-b',
                 opts.get('serial_baud', mcu.communication_speed)
             ]
@@ -657,6 +753,11 @@ class KQF(object):
 
         if opts.get('verbose'):
             args.append(['-v'])
+
+        flavor = KQFFlavor(self, self._config, mcu.flavor, True)
+        logging.debug(f"Launching katapult flashtool: {args}")
+        args += ['-f', flavor.firmware_path(ver) / 'klipper.bin']
+        subprocess.run(args, check=True)
 
     def list_mcus(self):
         return self._mcus.keys()
