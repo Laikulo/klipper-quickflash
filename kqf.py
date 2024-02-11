@@ -685,7 +685,11 @@ class KQF(object):
                 termios.tcsetattr(file_no, termios.TCSADRAIN, old_attrs)
                 termios.tcdrain(file_no)
         elif entry_method == 'can':
-            raise NotImplementedError
+            self._invoke_katapult(mcu.flash_opts, [
+                '-i', mcu.flash_opts.get('interface', mcu.communication_device),
+                '-u', mcu.flash_opts.get('uuid', mcu.communication_id),
+                '-r'
+            ])
         else:
             raise ValueError(f"Unknown bootloader entry method: {entry_method}")
 
@@ -708,9 +712,8 @@ class KQF(object):
 
     KATAPULT_FLASHTOOL_URL = "https://raw.githubusercontent.com/Arksine/katapult/master/scripts/flashtool.py"
 
-    def flash_katapult(self, mcu: KlipperMCU, ver: str):
+    def _ensure_katapult(self):
         flash_can_script = pathlib.Path("~/.kqf/lib/flashtool.py").expanduser()
-        opts = mcu.flash_opts
         if not flash_can_script.exists():
             logging.debug(f"Downloaded katapult flashtool from {KQF.KATAPULT_FLASHTOOL_URL}")
             flash_can_script.parent.mkdir(parents=True, exist_ok=True)
@@ -720,7 +723,9 @@ class KQF(object):
         if not cur_mode & 0o111 == 0o111:
             logging.debug(f"Marked flashtool as excecutable")
             flash_can_script.chmod(cur_mode | 0o111)
+        return flash_can_script
 
+    def _invoke_katapult(self, opts, extra_args):
         environ = os.environ
         args = []
         interp: Optional[str] = None
@@ -732,11 +737,15 @@ class KQF(object):
             interp = args.append(opts['interpreter'])
         if interp:
             args.append(interp)
+        args.append(self._ensure_katapult())
+        args += extra_args
+        subprocess.run(args, check=True)
 
-        args.append(flash_can_script)
+    def flash_katapult(self, mcu: KlipperMCU, ver: str):
+        opts = mcu.flash_opts
 
         katapult_mode = opts.get('mode', 'can')
-
+        args = []
         logging.debug(f'Katapult flash in {katapult_mode} mode')
         if katapult_mode == 'can':
             args += [
@@ -771,7 +780,7 @@ class KQF(object):
         flavor = KQFFlavor(self, self._config, mcu.flavor, True)
         logging.debug(f"Launching katapult flashtool: {args}")
         args += ['-f', flavor.firmware_path(ver) / 'klipper.bin']
-        subprocess.run(args, check=True)
+        self._invoke_katapult(opts, args)
 
     def list_mcus(self):
         return self._mcus.keys()
