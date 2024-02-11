@@ -694,6 +694,11 @@ class KQF(object):
             raise ValueError(f"Unknown bootloader entry method: {entry_method}")
 
     def flash_make(self, mcu, ver: str):
+        ignore_failure: Union[bool,str]
+        if mcu.mcu_type == 'stm32':
+            ignore_failure = "Klipper misreports successes as failures when using dfu-util on some stm32 parts"
+        else:
+            ignore_failure = False
         flavor = KQFFlavor(self, self._config, mcu.flavor)
         opts = mcu.flash_opts
         with flavor:
@@ -708,7 +713,13 @@ class KQF(object):
                 make_args.append("-d")
             make_args += [opts[var] for var in opts if var.startswith('var_')]
             make_args.append(opts.get('target', 'flash'))
-            subprocess.run(make_args, cwd=self._config.klipper_repo, check=True)
+            try:
+                subprocess.run(make_args, cwd=self._config.klipper_repo, check=True)
+            except subprocess.CalledProcessError as e:
+                if ignore_failure:
+                    self.logger.warning(f"Ignoring flash failure: {ignore_failure}")
+                else:
+                    raise e
 
     KATAPULT_FLASHTOOL_URL = "https://raw.githubusercontent.com/Arksine/katapult/master/scripts/flashtool.py"
 
