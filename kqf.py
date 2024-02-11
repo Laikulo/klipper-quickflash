@@ -660,7 +660,7 @@ class KQF(object):
                     termios.tcdrain(file_no)
                     time.sleep(delay)
                     termios.tcdrain(file_no)
-                except (BrokenPipeError, termios.error):
+                except (BrokenPipeError, termios.error, OSError):
                     self.logger.debug("Device has disconnected, assuming reboot in progress")
                 self.logger.debug("Waiting for reboot")
                 time.sleep(post_delay)
