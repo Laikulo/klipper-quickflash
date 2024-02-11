@@ -670,7 +670,7 @@ class KQF(object):
             # Get the constant from the termios module
             baud_c = getattr(termios,
                              f'B{mcu.flash_opts.get("entry_baud", mcu.flash_opts.get("baud",mcu.communication_speed))}')
-            with serial_path.open("ab+") as serial_port:
+            with serial_path.open("ab+", buffering=0) as serial_port:
                 file_no = serial_port.fileno()
                 old_attrs = termios.tcgetattr(file_no)
                 attrs = old_attrs.copy()
