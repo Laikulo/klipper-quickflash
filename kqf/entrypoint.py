@@ -12,19 +12,18 @@ def entrypoint(*args, **kwargs):
     if sys.version_info >= (3, 7):
         go()
     elif sys.version_info[0] == 3:
-        print(
-            "KQF requires python 3.7 or greater, looking for a newer one to switch to...",
-            file=sys.stderr,
+        sys.stderr.write(
+            "KQF requires python 3.7 or greater, looking for a newer one to switch to...\n",
         )
         reinvoke(find_newer_py3())
     elif sys.version_info[0] == 2:
         # We are in python 2, so let's try to find a python 3
-        print("KQF requires python 3, looking for one to switch to...", file=sys.stderr)
+        sys.stderr.write("KQF requires python 3, looking for one to switch to...\n")
         reinvoke(find_py3())
     else:
-        print("KQF was unable to determine your python version, continuing anyway.\nThings may behave poorly.\n"
+        sys.stderr.write("KQF was unable to determine your python version, continuing anyway.\nThings may behave poorly.\n"
               "Unless python 4 has been released, this is a bug, and should be reported at "
-              "https://github.com/laikulo/klipper-quickflash/issues")
+              "https://github.com/laikulo/klipper-quickflash/issues\n")
         go()
 
 
@@ -47,7 +46,7 @@ def find_newer_py3():
 
 
 def reinvoke(interpreter):
-    print("Switching to newer python at " + interpreter, file=sys.stderr)
+    sys.stderr.write("Switching to newer python at " + interpreter + "\n")
     from sys import argv
 
     try:
@@ -58,7 +57,7 @@ def reinvoke(interpreter):
 
 
 def die(msg):
-    print(msg, file=sys.stderr)
+    sys.stderr.write(msg + "\n")
     sys.exit(2)
 
 
