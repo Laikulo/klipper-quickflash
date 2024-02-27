@@ -26,8 +26,8 @@ test:
 lint: lint_flake8 lint_vermin
 
 .PHONY: lint_vermin
-test_vermin:
-	vermin --violations --target="${PY_TARGET_VER}" kqf/
+lint_vermin:
+	vermin --quiet --violations --target="${PY_TARGET_VER}" kqf/
 
 .PHONY: lint_flake8
 lint_flake8:
