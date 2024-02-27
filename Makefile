@@ -3,7 +3,7 @@ PYTHON_INTERPRETER=/usr/bin/env python3
 
 PY_FILES=$(wildcard kqf/**.py)
 PY_TARGET_VER=3.7
-PY_TARGET_VER_NODOTS=$(subst .,,${PY_TARGET_VER})
+PY_TARGET_VER_NO_DOTS=$(subst .,,${PY_TARGET_VER})
 
 .PHONY: all
 all: pyz
@@ -11,8 +11,8 @@ all: pyz
 .PHONY: pyz
 pyz: kqf.pyz
 
-kqf.pyz: $(PY_FILES)
-	python -m zipapp kqf -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz
+kqf.pyz: $(PY_FILES) build/kqf/
+	python -m zipapp build -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz -m "kqf.__main__:entrypoint"
 
 .PHONY: dev
 dev: lint pyz test
@@ -23,7 +23,7 @@ test:
 	echo "TODO: tests"
 
 .PHONY: lint
-lint: lint_flake8 lint_vermin
+lint: lint_flake8 lint_vermin lint_compile
 
 .PHONY: lint_vermin
 lint_vermin:
@@ -33,9 +33,26 @@ lint_vermin:
 lint_flake8:
 	flake8 kqf/
 
+.PHONY: lint_compile
+lint_compile:
+	python -m compileall -q kqf
+
 .PHONY: format
 format: format_black
 
 .PHONY: format_black
 format_black:
-	black --target-version "py${PY_TARGET_VER_NODOTS}" kqf/
+	black --target-version "py${PY_TARGET_VER_NO_DOTS}" kqf/
+
+.PHONY: clean
+clean:
+	rm -rf build/
+
+.IGNORE: build/
+build/:
+	[[ ! -d build ]] && mkdir build
+
+.IGNORE: build/kqf/
+build/kqf/: kqf/
+	rm -rf build/kqf
+	cp -rp kqf build/kqf
