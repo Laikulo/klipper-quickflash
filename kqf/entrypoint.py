@@ -21,9 +21,11 @@ def entrypoint(*args, **kwargs):
         sys.stderr.write("KQF requires python 3, looking for one to switch to...\n")
         reinvoke(find_py3())
     else:
-        sys.stderr.write("KQF was unable to determine your python version, continuing anyway.\nThings may behave poorly.\n"
-              "Unless python 4 has been released, this is a bug, and should be reported at "
-              "https://github.com/laikulo/klipper-quickflash/issues\n")
+        sys.stderr.write(
+            "KQF was unable to determine your python version, continuing anyway.\nThings may behave poorly.\n"
+            "Unless python 4 has been released, this is a bug, and should be reported at "
+            "https://github.com/laikulo/klipper-quickflash/issues\n"
+        )
         go()
 
 
