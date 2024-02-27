@@ -10,19 +10,22 @@ PY_NEWER_MINOR_FORMATS = ["py3{}", "python3{}", "python3.{}", "python3-{}"]
 
 def entrypoint(*args, **kwargs):
     if sys.version_info >= (3, 7):
-        # We are already on a supported python, so it's safe to just go to the real entrypoint
-        from .cli import entrypoint as real_entrypoint
-
-        real_entrypoint()
+        go()
     elif sys.version_info[0] == 3:
         print(
-            "KQF requires python 3.7 or greater, looking for one to switch to...",
+            "KQF requires python 3.7 or greater, looking for a newer one to switch to...",
             file=sys.stderr,
         )
         reinvoke(find_newer_py3())
     elif sys.version_info[0] == 2:
         # We are in python 2, so let's try to find a python 3
+        print("KQF requires python 3, looking for one to switch to...", file=sys.stderr)
         reinvoke(find_py3())
+    else:
+        print("KQF was unable to determine your python version, continuing anyway.\nThings may behave poorly.\n"
+              "Unless python 4 has been released, this is a bug, and should be reported at "
+              "https://github.com/laikulo/klipper-quickflash/issues")
+        go()
 
 
 def find_py3():
@@ -47,10 +50,11 @@ def reinvoke(interpreter):
     print("Switching to newer python at " + interpreter, file=sys.stderr)
     from sys import argv
 
-    os.execv(interpreter, [interpreter] + argv)
+    try:
+        os.execv(interpreter, [interpreter] + argv)
     # This python is no longer executing, if we are still here, execv failed
-    # noinspection PyUnreachableCode
-    die("Unable to switch to " + interpreter)
+    except Exception:
+        die("Unable to switch to " + interpreter)
 
 
 def die(msg):
@@ -63,8 +67,14 @@ def which(name):
     for i in path_members:
         full_name = i + "/" + name
         if os.path.isfile(full_name):
-            return name
+            return full_name
     return None
+
+
+def go():
+    from .cli import entrypoint as real_entrypoint
+
+    real_entrypoint()
 
 
 if __name__ == "__main__":
