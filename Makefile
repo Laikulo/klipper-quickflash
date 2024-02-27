@@ -12,7 +12,7 @@ all: pyz
 pyz: kqf.pyz
 
 kqf.pyz: $(PY_FILES) build/kqf/
-	python -m zipapp build -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz -m "kqf.__main__:entrypoint"
+	python -m zipapp build -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz -m "kqf.cli:entrypoint"
 
 .PHONY: dev
 dev: lint pyz test
