@@ -1,5 +1,8 @@
 # IDE Stuff
 /.idea/
 
+# Editor temps
+*.swp
+
 # Outputs
 kqf.pyz
