@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 import json
@@ -27,14 +26,11 @@ def get_can_interface_bitrate(ifname: str) -> Optional[str]:
 
 def launch_editor(filename: os.PathLike, editor: Optional[str] = None) -> None:
     editor = editor or find_editor()
-    subprocess.run([
-        editor,
-        filename
-    ])
+    subprocess.run([editor, filename])
 
 
-EDITOR_ENV_TO_TRY = ['KQF_EDITOR', 'VISUAL', 'EDITOR']
-EDITORS_TO_TRY = ['sensible-editor', 'editor', 'vim', 'vi', 'emacs', 'nano', 'pico']
+EDITOR_ENV_TO_TRY = ["KQF_EDITOR", "VISUAL", "EDITOR"]
+EDITORS_TO_TRY = ["sensible-editor", "editor", "vim", "vi", "emacs", "nano", "pico"]
 
 
 def find_editor() -> str:
@@ -44,4 +40,6 @@ def find_editor() -> str:
     for i in EDITORS_TO_TRY:
         if shutil.which(i):
             return i
-    raise RuntimeError("Unable to find an editor, please set the KQF_EDITOR, EDITOR, or VISUAL envvar")
+    raise RuntimeError(
+        "Unable to find an editor, please set the KQF_EDITOR, EDITOR, or VISUAL envvar"
+    )

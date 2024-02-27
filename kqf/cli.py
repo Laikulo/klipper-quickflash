@@ -4,10 +4,13 @@ import sys
 from typing import Callable
 
 from .kqf import KQF, KQFFlavor
+from .util import launch_editor
 
 
 def entrypoint() -> None:
     if sys.version_info < (3, 7):
+        # This may require moving this logic into its own module to prevent post-3.7 syntax from breaking it
+        # Try to finder newer pythons in PATH if needed
         logging.fatal("Python 3.7 or greater is required")
         sys.exit(1)
 
@@ -26,6 +29,13 @@ def entrypoint() -> None:
 
     add_cmd(
         commands, "mcu_info", cmd_dump_mcu, help="Prints info about MCUs, for debugging"
+    )
+
+    add_cmd(
+        commands,
+        "configedit",
+        cmd_edit_config,
+        help="Opens an editor to modify the KQF configuration",
     )
 
     menuconfig_cmd = add_cmd(
@@ -140,3 +150,7 @@ def cmd_flash(kqf: "KQF", args):
                 f"The MCU configuration '{mcu_name}' could not be found, check the KQF configuration"
             )
         kqf.flash(mcu)
+
+
+def cmd_edit_config(kqf: KQF, args):
+    launch_editor(kqf.config_path)

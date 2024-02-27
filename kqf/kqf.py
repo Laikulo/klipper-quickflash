@@ -25,6 +25,8 @@ class KQF(object):
 
     def __init__(self, config_path: str, logger=logging.getLogger()):
         self._logger = logger
+        self._config_path = pathlib.Path(config_path).expanduser()
+        # TODO Make this take a path
         self._config = KQFConfig.get(config_path)
         self._mcus = {
             s: KlipperMCU.from_kqf_config(s, self._config)
@@ -42,6 +44,10 @@ class KQF(object):
     def config(self):
         return self._config
 
+    @property
+    def config_path(self):
+        return self._config_path
+
     def flavor_path(self, flavor: str) -> pathlib.Path:
         return (self._config.config_flavors_path / flavor).with_suffix(".conf")
 
@@ -53,7 +59,7 @@ class KQF(object):
             "\n"
             + "---\n".join([self._mcus[m].pretty_format() for m in self._mcus])
             + "---",
-            )
+        )
 
     def inventory(self, self_extend: bool = True):
         if self._config.klipper_config:
@@ -384,7 +390,7 @@ class KQFFlavor(object):
             ]
 
     def __init__(
-            self, kqf: KQF, kqf_config: KQFConfig, name: str, must_exist: bool = False
+        self, kqf: KQF, kqf_config: KQFConfig, name: str, must_exist: bool = False
     ):
         self._parent = kqf
         self._flavor = name

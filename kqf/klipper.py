@@ -157,9 +157,9 @@ class KlipperMCU(object):
                 )
         # If the canbus bitrate is not already known, guess from the interface
         if (
-                self.communication_type == "can"
-                and self.communication_device
-                and not self.communication_speed
+            self.communication_type == "can"
+            and self.communication_device
+            and not self.communication_speed
         ):
             self.communication_speed = get_can_interface_bitrate(
                 self.communication_device

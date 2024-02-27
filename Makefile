@@ -12,7 +12,7 @@ all: pyz
 pyz: kqf.pyz
 
 kqf.pyz: $(PY_FILES) build/kqf/
-	python -m zipapp build -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz -m "kqf.cli:entrypoint"
+	python -m zipapp build -p="${PYTHON_INTERPRETER}" -c -o kqf.pyz -m "kqf.entrypoint:entrypoint"
 
 .PHONY: dev
 dev: lint pyz test
@@ -23,11 +23,15 @@ test:
 	echo "TODO: tests"
 
 .PHONY: lint
-lint: lint_flake8 lint_vermin lint_compile
+lint: lint_flake8 lint_vermin lint_vermin_ep lint_compile
 
 .PHONY: lint_vermin
 lint_vermin:
 	vermin --quiet --violations --target="${PY_TARGET_VER}" kqf/
+
+.PHONY: lint_vermin_ep
+lint_vermin_ep:
+	vermin --quiet --violations --target=2.0 kqf/entrypoint.py
 
 .PHONY: lint_flake8
 lint_flake8:
@@ -47,12 +51,13 @@ format_black:
 .PHONY: clean
 clean:
 	rm -rf build/
+	rm -f kqf.pyz
 
 .IGNORE: build/
 build/:
 	[[ ! -d build ]] && mkdir build
 
 .IGNORE: build/kqf/
-build/kqf/: kqf/
+build/kqf/: kqf/ build/
 	rm -rf build/kqf
 	cp -rp kqf build/kqf
