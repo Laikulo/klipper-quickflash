@@ -150,7 +150,7 @@ def cmd_flash(kqf: "KQF", args):
         kqf.logger.info(f"Building flavors: {flavors_to_build}")
         for flavor in flavors_to_build:
             flavor_success = kqf.build(flavor)
-            if not flavors_to_build:
+            if not flavor_success:
                 raise RuntimeError(
                     "Unable to build flavor {flavor}, aborting auto-build-and-flash"
                 )
@@ -375,7 +375,7 @@ comms:
 flashing:
   method:  '{self.flash_method}'
   options:{opt_str}
-  loader:  '{self.bootloader}' 
+  loader:  '{self.bootloader}'
         """
 
 
@@ -453,25 +453,25 @@ class KQFConfig(object):
         # Options in this section are for KQF itself
         # Options in other sections correspond to an mcu of that name
         # Note that section names are case sensitive
-        
+
         # klipper_repo_path: Where to find the klipper repo that will be used to build firmware.
         #   the special value 'autodetect' will try a few common locations, and should work with KIAUH.
         klipper_repo_path: autodetect
-        
+
         # klipper_config_path: The location of the klipper config to use when searching for MCUs
         #   The special value 'autodetect' attempts to automatically find the klipper config
         #   If this value is not present, MCUs will not be autodetected"
         klipper_config_path: autodetect
-        
+
         # config_flavors_path: Path to a directory of klipper .config files, relative to the location of the script
         config_flavors_path: ~/.kqf/flavors
-        
+
         # firmware_storage: The path of where to store compiled firmware
         firmware_storage: ~/.kqf/firmware
-        
+
         [mcu]
         # place configuration for your primary MCU here
-        
+
         #[mcu secondary_mcu]
         # place configuration for another MCU here, and uncomment the above.
         #   The section name should match the name in your printer.cfg (e.g. [mcu somemcu].
@@ -887,7 +887,7 @@ class KQF(object):
 
         cur_mode = flash_can_script.stat().st_mode
         if not cur_mode & 0o111 == 0o111:
-            logging.debug(f"Marked flashtool as excecutable")
+            logging.debug("Marked flashtool as excecutable")
             flash_can_script.chmod(cur_mode | 0o111)
         return flash_can_script
 
