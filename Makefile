@@ -32,6 +32,7 @@ lint_vermin:
 .PHONY: lint_vermin_ep
 lint_vermin_ep:
 	vermin --quiet --violations --target=2.0 kqf/entrypoint.py
+	vermin --quiet --violations --target=3.0 kqf/entrypoint.py
 
 .PHONY: lint_flake8
 lint_flake8:
