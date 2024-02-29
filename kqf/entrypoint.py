@@ -73,9 +73,9 @@ def which(name):
 
 
 def go():
-    from .cli import entrypoint as real_entrypoint
+    from .cli import KQFCli
 
-    real_entrypoint()
+    exit(KQFCli.main())
 
 
 if __name__ == "__main__":

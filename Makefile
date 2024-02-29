@@ -17,7 +17,6 @@ kqf.pyz: $(PY_FILES) build/kqf/
 .PHONY: dev
 dev: lint pyz test
 
-
 .PHONY: test
 test: 
 	echo "TODO: tests"
