@@ -31,9 +31,9 @@ class KQFCli(object):
             "Klipper QuickFlash v0.0.0 (githash) by Laikulo - This KQF was packaged on DATE\n"
             "   KQF is free software distributed under the terms of the GPL3\n"
             "   Run kqf with the 'license' action for more information\n"
-            )
+        )
 
-        if 'cmd_obj' in args:
+        if "cmd_obj" in args:
             selected_cmd = args.cmd_obj
         else:
             self._logger.info("No action was specified, launching the wizard")
@@ -51,11 +51,11 @@ class KQFCli(object):
             else:
                 message = "Not Implemented"
             self._logger.fatal(
-                            message + "\n"
-                            "Sorry, but it appears you've reached a part of KQF that hasn't been written yet.\n"
-                            "If you encountered this in a released version of KQF, please let us know at\n"
-                            "https://github.com/laikulo/klipper-quickflash/issues"
-                         )
+                message + "\n"
+                "Sorry, but it appears you've reached a part of KQF that hasn't been written yet.\n"
+                "If you encountered this in a released version of KQF, please let us know at\n"
+                "https://github.com/laikulo/klipper-quickflash/issues"
+            )
 
     def _setup_logging(self):
         logging.basicConfig()
@@ -82,86 +82,132 @@ class KQFCli(object):
     def add_command(self, cmd: "KQFCommand"):
         cmd.subparser(self._command_parser)
 
+    def add_commands(self, cmds: List["KQFCommand"]):
+        for cmd in cmds:
+            self.add_command(cmd)
+
     def _add_default_commands(self):
         self._wizard = KQFWizard(self)
         self.add_command(self._wizard)
 
-        self.add_command(
-            KQFCommand(
-                self,
-                "mcu_info",
-                cmd_dump_mcu,
-                help_text="Prints info about MCUs, for debugging",
-            )
-        )
-        self.add_command(
-            KQFCommand(
-                self,
-                "edit_config",
-                cmd_edit_config,
-                help_text="Launch an editor to edit the KQF config",
-            )
+        self.add_commands(
+            [
+                KQFCommand(
+                    self,
+                    "mcu_info",
+                    cmd_dump_mcu,
+                    help_text="Prints info about MCUs, for debugging",
+                ),
+                KQFCommand(
+                    self,
+                    "edit_config",
+                    cmd_edit_config,
+                    help_text="Launch an editor to edit the KQF config",
+                ),
+                KQFCommand(
+                    self,
+                    "configedit",
+                    cmd_edit_config,
+                    help_text="Opens an editor to modify the KQF configuration",
+                ),
+                KQFCommand(
+                    self,
+                    "menuconfig",
+                    cmd_menuconfig,
+                    args={
+                        "flavor": {
+                            "metavar": "FLAVOR",
+                            "help": "The flavor to run menuconfig for",
+                        },
+                        "--build": {
+                            'action': "store_true",
+                            'default': False,
+                            'help': "Build firmware after configuring"
+                        }
+                    },
+                ),
+                KQFCommand(
+                    self,
+                )
+            ]
         )
 
 
 class KQFCommand(object):
     def __init__(
-        self, cli: KQFCli, name: str, fn: Callable, needs_kqf=True, help_text: Optional[str] = None
+        self,
+        cli: KQFCli,
+        name: str,
+        fn: Callable,
+        needs_kqf=True,
+        help_text: Optional[str] = None,
+        args: Dict[str, Dict[str, any]] = None,
     ):
         self.name = name
         self.action = fn
         self.needs_kqf: bool = needs_kqf
         self.help_text: Optional[str] = help_text
-        self.args: List[Dict] = []
+        self.args: Dict[str, Dict[str, any]] = {} if args is None else args
 
     def subparser(self, subparsers):
         sp = subparsers.add_parser(name=self.name, help=self.help_text)
         sp.set_defaults(cmd_obj=self)
+        for arg in self.args:
+            sp.add_argument(arg, **self.args[arg])
 
 
 class KQFWizard(KQFCommand):
     def __init__(self, cli: KQFCli):
-        super().__init__(cli, "wizard", self.begin, needs_kqf=False, help_text="Launch the KQF interactive wizard")
+        super().__init__(
+            cli,
+            "wizard",
+            self.begin,
+            needs_kqf=False,
+            help_text="Launch the KQF interactive wizard",
+        )
 
     def begin(self, _, args):
         config_path = pathlib.Path(args.c).expanduser()
         if not config_path.exists():
-            if self.ask(
-                        f"KQF's configuration file does not exist at {config_path}\n"
-                        "Would you like to create it"
-                        ) == 'y':
+            if (
+                self.ask(
+                    f"KQF's configuration file does not exist at {config_path}\n"
+                    "Would you like to create it"
+                )
+                == "y"
+            ):
                 config_generation_mode = self.ask(
                     "Would you like to:\n"
                     " d) Start with the default configuration for KQF\n"
                     " e) Start with an empty configuration file\n"
                     " i) Answer questions to generate a configuration\n"
                     "Select",
-                    ['d', 'e', 'i']
+                    ["d", "e", "i"],
                 )
-                if config_generation_mode == 'd':
+                if config_generation_mode == "d":
                     with config_path.open("w") as config_data:
                         config_data.write(config.KQFConfig.DEFAULT)
                         config_data.close()
-                elif config_generation_mode == 'e':
+                elif config_generation_mode == "e":
                     with config_path.open("w") as config_data:
                         config_data.close()
-                elif config_generation_mode == 'i':
+                elif config_generation_mode == "i":
                     raise NotImplementedError("Configuration Interview")
                 else:
                     raise RuntimeError("This should never happen")
 
-                if self.ask("Would you like to open the config in an editor") == 'y':
+                if self.ask("Would you like to open the config in an editor") == "y":
                     util.launch_editor(config_path)
 
             else:
                 self.write(
                     "The KQF wizard requires a config file, KQF will now exit...\n"
                     "Hint: run KQF with the -h option to see other actions that may not require a config"
-                    )
+                )
                 return
         raise NotImplementedError("Wizard Main menu")
 
-    def ask(self, prompt: str, answers: List[str] = ('y', 'n')):
+    def ask(self, prompt: str, answers: List[str] = ("y", "n")):
         self.write(f'\n{prompt} ({"/".join(answers)}): ', nl=False)
         while True:
             ret = self.quietread(1).lower()
@@ -185,6 +231,7 @@ class KQFWizard(KQFCommand):
 
     def write(self, text: str, nl: bool = True):
         print(text, end="\n" if nl else "", file=sys.stderr, flush=True)
+
 
 # def entrypoint() -> None:
 #     add_cmd(
