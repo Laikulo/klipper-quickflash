@@ -11,7 +11,7 @@ import pathlib
 import shutil
 import contextlib
 import struct
-import datetime
+from datetime import datetime
 from typing import Union, Optional
 
 from .config import KQFConfig

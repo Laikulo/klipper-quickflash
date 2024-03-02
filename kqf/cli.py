@@ -3,7 +3,7 @@ import logging
 import pathlib
 import sys
 import termios
-from typing import Callable, Optional, List, Dict
+from typing import Callable, Optional, List, Sequence
 
 from . import config, util
 from .kqf import KQF, KQFFlavor
@@ -100,12 +100,6 @@ class KQFCli(object):
                 ),
                 KQFCommand(
                     self,
-                    "edit_config",
-                    cmd_edit_config,
-                    help_text="Launch an editor to edit the KQF config",
-                ),
-                KQFCommand(
-                    self,
                     "configedit",
                     cmd_edit_config,
                     help_text="Opens an editor to modify the KQF configuration",
@@ -114,21 +108,25 @@ class KQFCli(object):
                     self,
                     "menuconfig",
                     cmd_menuconfig,
-                    args={
-                        "flavor": {
-                            "metavar": "FLAVOR",
-                            "help": "The flavor to run menuconfig for",
-                        },
-                        "--build": {
-                            'action': "store_true",
-                            'default': False,
-                            'help': "Build firmware after configuring"
-                        }
-                    },
+                    help_text="Launch menuconfig for a flavor",
+                    args=(
+                        KQFArg("flavor", metavar="FLAVOR", help="The flavor to run menuconfig for"),
+                        KQFArg("--build", action="store_true", default=False, help="Build firmware after configuring"),
+                    ),
                 ),
                 KQFCommand(
                     self,
-                )
+                    "build",
+                    cmd_build,
+                    help_text="Build firmware for a flavor",
+                    args=(
+                        KQFMEGroup(
+                            KQFArg("flavor", metavar='FLAVOR', nargs="?", help="The flavor to build for"),
+                            KQFArg("--all", dest='build_all', action="store_true", help="Build all flavors"),
+                            required=True
+                        ),
+                    )
+                ),
             ]
         )
 
@@ -141,19 +139,19 @@ class KQFCommand(object):
         fn: Callable,
         needs_kqf=True,
         help_text: Optional[str] = None,
-        args: Dict[str, Dict[str, any]] = None,
+        args: Sequence['KQFArgBase'] = ()
     ):
         self.name = name
         self.action = fn
         self.needs_kqf: bool = needs_kqf
         self.help_text: Optional[str] = help_text
-        self.args: Dict[str, Dict[str, any]] = {} if args is None else args
+        self.args: Sequence['KQFArgBase'] = args
 
     def subparser(self, subparsers):
         sp = subparsers.add_parser(name=self.name, help=self.help_text)
         sp.set_defaults(cmd_obj=self)
         for arg in self.args:
-            sp.add_argument(arg, **self.args[arg])
+            arg.add_to_sp(sp)
 
 
 class KQFWizard(KQFCommand):
@@ -233,27 +231,32 @@ class KQFWizard(KQFCommand):
         print(text, end="\n" if nl else "", file=sys.stderr, flush=True)
 
 
+class KQFArgBase(object):
+    def add_to_sp(self, sp):
+        raise NotImplementedError("Broken arg type")
+
+
+class KQFArg(KQFArgBase):
+    def __init__(self, *args, **kwags):
+        self._opts = args
+        self._kwopts = kwags
+
+    def add_to_sp(self, sp):
+        sp.add_argument(*self._opts, **self._kwopts)
+
+
+class KQFMEGroup(KQFArgBase):
+    def __init__(self, *args: KQFArgBase, **kwargs):
+        self._children: List[KQFArgBase] = list(args)
+        self._opts = kwargs
+
+    def add_to_sp(self, sp):
+        grp = sp.add_mutually_exclusive_group(**self._opts)
+        for child in self._children:
+            child.add_to_sp(grp)
+
+
 # def entrypoint() -> None:
-#     add_cmd(
-#         commands,
-#         "configedit",
-#         cmd_edit_config,
-#         help="Opens an editor to modify the KQF configuration",
-#     )
-#
-#     menuconfig_cmd = add_cmd(
-#         commands, "menuconfig", cmd_menuconfig, help="Launch menuconfig for a flavor"
-#     )
-#     menuconfig_cmd.add_argument(
-#         "flavor", metavar="FLAVOR", help="The flavor to run menuconfig for"
-#     )
-#     menuconfig_cmd.add_argument(
-#         "--build",
-#         action="store_true",
-#         default=False,
-#         help="Build firmware after configuring",
-#     )
-#
 #     build_cmd = add_cmd(
 #         commands, "build", cmd_build, help="Build firmware for a flavor"
 #     )
