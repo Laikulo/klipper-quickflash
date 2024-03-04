@@ -127,6 +127,17 @@ class KQFCli(object):
                         ),
                     )
                 ),
+                KQFCommand(
+                    self,
+                    "flash",
+                    cmd_flash,
+                    help_text="Flash to a given MCU",
+                    args=(
+                        KQFArg("mcu", metavar="MCU", help="The MCU to flash", nargs="*"),
+                        KQFArg("--all", dest="flash_all", action="store_true", help="Flash all"),
+                        KQFArg("--build", dest="build_before_flash", action="store_true", help="Build before flashing")
+                    )
+                )
             ]
         )
 
@@ -254,41 +265,6 @@ class KQFMEGroup(KQFArgBase):
         grp = sp.add_mutually_exclusive_group(**self._opts)
         for child in self._children:
             child.add_to_sp(grp)
-
-
-# def entrypoint() -> None:
-#     build_cmd = add_cmd(
-#         commands, "build", cmd_build, help="Build firmware for a flavor"
-#     )
-#     build_flavor_spec = build_cmd.add_mutually_exclusive_group(required=True)
-#     build_flavor_spec.add_argument(
-#         "flavor", metavar="FLAVOR", help="The flavor to build firmware for", nargs="?"
-#     ),
-#     build_flavor_spec.add_argument(
-#         "--all", dest="build_all", action="store_true", help="Build all"
-#     )
-#
-#     flash_cmd = add_cmd(commands, "flash", cmd_flash, help="Flash to a given MCU")
-#     flash_cmd.add_argument(
-#         "--all", dest="flash_all", action="store_true", help="Build all"
-#     )
-#     flash_cmd.add_argument("mcu", metavar="MCU", help="the mcu to flash", nargs="*"),
-#     flash_cmd.add_argument(
-#         "--build",
-#         dest="build_before_flash",
-#         action="store_true",
-#         help="Build firmware for mcus before flashing",
-#     )
-#
-#     args = ap.parse_args()
-#
-#
-#     if args.cmd_action:
-#         args.cmd_action(kqf, args)
-#     else:
-#         logging.fatal("No action was specified, kqf will now exit")
-#         ap.print_help()
-#
 
 
 def cmd_dump_mcu(kqf, _):
