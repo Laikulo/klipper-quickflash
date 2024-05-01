@@ -70,6 +70,7 @@ build/:
 build/kqf/: kqf/ build/ generate
 	rm -rf build/kqf
 	cp -rp kqf build/kqf
+	cp COPYING build/kqf/GPL3.txt
 
 .PHONY: .FORCE
 

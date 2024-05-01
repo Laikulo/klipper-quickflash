@@ -95,6 +95,20 @@ class KQFCli(object):
             [
                 KQFCommand(
                     self,
+                    "license",
+                    cmd_license,
+                    needs_kqf=False,
+                    help_text="Print info about the license of KQF",
+                    args=([
+                        KQFArg(
+                            "--text",
+                            action="store_true",
+                            help="Print the full text of the license, if available"
+                        )
+                    ])
+                ),
+                KQFCommand(
+                    self,
                     "mcu_info",
                     cmd_dump_mcu,
                     help_text="Prints info about MCUs, for debugging",
@@ -111,8 +125,17 @@ class KQFCli(object):
                     cmd_menuconfig,
                     help_text="Launch menuconfig for a flavor",
                     args=(
-                        KQFArg("flavor", metavar="FLAVOR", help="The flavor to run menuconfig for"),
-                        KQFArg("--build", action="store_true", default=False, help="Build firmware after configuring"),
+                        KQFArg(
+                            "flavor",
+                            metavar="FLAVOR",
+                            help="The flavor to run menuconfig for",
+                        ),
+                        KQFArg(
+                            "--build",
+                            action="store_true",
+                            default=False,
+                            help="Build firmware after configuring",
+                        ),
                     ),
                 ),
                 KQFCommand(
@@ -122,11 +145,21 @@ class KQFCli(object):
                     help_text="Build firmware for a flavor",
                     args=(
                         KQFMEGroup(
-                            KQFArg("flavor", metavar='FLAVOR', nargs="?", help="The flavor to build for"),
-                            KQFArg("--all", dest='build_all', action="store_true", help="Build all flavors"),
-                            required=True
+                            KQFArg(
+                                "flavor",
+                                metavar="FLAVOR",
+                                nargs="?",
+                                help="The flavor to build for",
+                            ),
+                            KQFArg(
+                                "--all",
+                                dest="build_all",
+                                action="store_true",
+                                help="Build all flavors",
+                            ),
+                            required=True,
                         ),
-                    )
+                    ),
                 ),
                 KQFCommand(
                     self,
@@ -134,11 +167,23 @@ class KQFCli(object):
                     cmd_flash,
                     help_text="Flash to a given MCU",
                     args=(
-                        KQFArg("mcu", metavar="MCU", help="The MCU to flash", nargs="*"),
-                        KQFArg("--all", dest="flash_all", action="store_true", help="Flash all"),
-                        KQFArg("--build", dest="build_before_flash", action="store_true", help="Build before flashing")
-                    )
-                )
+                        KQFArg(
+                            "mcu", metavar="MCU", help="The MCU to flash", nargs="*"
+                        ),
+                        KQFArg(
+                            "--all",
+                            dest="flash_all",
+                            action="store_true",
+                            help="Flash all",
+                        ),
+                        KQFArg(
+                            "--build",
+                            dest="build_before_flash",
+                            action="store_true",
+                            help="Build before flashing",
+                        ),
+                    ),
+                ),
             ]
         )
 
@@ -151,13 +196,13 @@ class KQFCommand(object):
         fn: Callable,
         needs_kqf=True,
         help_text: Optional[str] = None,
-        args: Sequence['KQFArgBase'] = ()
+        args: Sequence["KQFArgBase"] = (),
     ):
         self.name = name
         self.action = fn
         self.needs_kqf: bool = needs_kqf
         self.help_text: Optional[str] = help_text
-        self.args: Sequence['KQFArgBase'] = args
+        self.args: Sequence["KQFArgBase"] = args
 
     def subparser(self, subparsers):
         sp = subparsers.add_parser(name=self.name, help=self.help_text)
@@ -322,6 +367,28 @@ def cmd_flash(kqf: "KQF", args):
                 f"The MCU configuration '{mcu_name}' could not be found, check the KQF configuration"
             )
         kqf.flash(mcu)
+
+
+def cmd_license(kqf: "KQF", args):
+    if args.text:
+        try:
+            import pkgutil
+            data = pkgutil.get_data('kqf', 'GPL3.txt')
+            print(data.decode("ASCII"))
+        except Error:
+            print("KQF could not load the license text, please see the FSF's website for a copy.")
+            pass
+    else:
+        print(
+            "KQF is free software: you can redistribute it and/or modify it under the terms of the "
+            "GNU General Public License as published by the Free Software Foundation, version 3 of the License.\n"
+            "This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;"
+            " without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+            " See the GNU General Public License for more details.\n"
+            "You should have received a copy of the GNU General Public License along with this program."
+            " If not, see <https://www.gnu.org/licenses/>.\n\n"
+            "KQF Contains a copy of the GPL3 text. To show the text, run this action with the --text argument"
+        )
 
 
 def cmd_edit_config(kqf: KQF, args):
