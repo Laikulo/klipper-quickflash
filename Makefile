@@ -53,11 +53,24 @@ clean:
 	rm -rf build/
 	rm -f kqf.pyz
 
-.IGNORE: build/
-build/:
-	[[ ! -d build ]] && mkdir build
+.PHONY: generate
+generate: kqf/version_gen.py
 
-.IGNORE: build/kqf/
-build/kqf/: kqf/ build/
+kqf/version_gen.py: KQF_PACK_VERSION=0.0.0-alpha
+kqf/version_gen.py: KQF_PACK_GITHASH=$(shell git rev-parse --short HEAD)
+kqf/version_gen.py: KQF_PACK_DATE=$(shell date +%Y-%m-%d)
+kqf/version_gen.py: .FORCE
+	echo "KQF_PACK_VERSION = '$(KQF_PACK_VERSION)'\nKQF_PACK_GITHASH = '$(KQF_PACK_GITHASH)'\nKQF_PACK_DATE = '$(KQF_PACK_DATE)'" > kqf/version_gen.py
+
+#.IGNORE: build/
+build/:
+	[ ! -d build ] && mkdir build
+
+#.IGNORE: build/kqf/
+build/kqf/: kqf/ build/ generate
 	rm -rf build/kqf
 	cp -rp kqf build/kqf
+
+.PHONY: .FORCE
+
+.FORCE:

@@ -7,3 +7,10 @@
 # Outputs
 kqf.pyz
 build/
+
+# Generated
+kqf/version_gen.py
+
+# python stuff
+__pycache__/*
+*.pyc

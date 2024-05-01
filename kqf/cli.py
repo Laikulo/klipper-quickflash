@@ -8,6 +8,7 @@ from typing import Callable, Optional, List, Sequence
 from . import config, util
 from .kqf import KQF, KQFFlavor
 from .util import launch_editor
+from .version import KQF_VERSION, KQF_GITHASH, KQF_DATE
 
 
 class KQFCli(object):
@@ -28,7 +29,7 @@ class KQFCli(object):
             logging.getLogger().setLevel(logging.DEBUG)
         print(
             "\n"
-            "Klipper QuickFlash v0.0.0 (githash) by Laikulo - This KQF was packaged on DATE\n"
+            f"Klipper QuickFlash v{KQF_VERSION} ({KQF_GITHASH}) by Laikulo - This KQF was packaged on {KQF_DATE}\n"
             "   KQF is free software distributed under the terms of the GPL3\n"
             "   Run kqf with the 'license' action for more information\n"
         )
