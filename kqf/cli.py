@@ -375,7 +375,7 @@ def cmd_license(kqf: "KQF", args):
             import pkgutil
             data = pkgutil.get_data('kqf', 'GPL3.txt')
             print(data.decode("ASCII"))
-        except Error:
+        except Exception:
             print("KQF could not load the license text, please see the FSF's website for a copy.")
             pass
     else:
@@ -387,7 +387,8 @@ def cmd_license(kqf: "KQF", args):
             " See the GNU General Public License for more details.\n"
             "You should have received a copy of the GNU General Public License along with this program."
             " If not, see <https://www.gnu.org/licenses/>.\n\n"
-            "KQF Contains a copy of the GPL3 text. To show the text, run this action with the --text argument"
+            "KQF Contains a copy of the GPL3 text. To show the text, run this action with the --text argument" 
+            " you may want to pipe this to a pager, like `less'"
         )
 
 
