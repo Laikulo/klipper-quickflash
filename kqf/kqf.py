@@ -129,7 +129,9 @@ class KQF(object):
                 self.logger.exception(f"An error occurred when building {flavor.name}")
                 return False
 
-    def flash(self, mcu: KlipperMCU, ver: str = "latest"):
+    def flash(
+        self, mcu: KlipperMCU, ver: str = "latest", permit_bootloader_entry: bool = True
+    ):
         if not mcu.flash_method:
             raise ValueError(
                 f"Flashing method for mcu {mcu.name} could not be automatically determined."
@@ -142,7 +144,7 @@ class KQF(object):
             raise ValueError(
                 f'Firmware version "{ver}" does not exist for flavor "{flavor}" as required by mcu "{mcu.name}"'
             )
-        if "entry_mode" in mcu.flash_opts:
+        if permit_bootloader_entry and ("entry_mode" in mcu.flash_opts):
             self.logger.debug(f"Preparing to enter bootloader on {mcu.name}")
             self.enter_bootloader(mcu)
         self.logger.info(

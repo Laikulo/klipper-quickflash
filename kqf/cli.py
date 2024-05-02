@@ -99,19 +99,28 @@ class KQFCli(object):
                     cmd_license,
                     needs_kqf=False,
                     help_text="Print info about the license of KQF",
-                    args=([
-                        KQFArg(
-                            "--text",
-                            action="store_true",
-                            help="Print the full text of the license, if available"
-                        )
-                    ])
+                    args=(
+                        [
+                            KQFArg(
+                                "--text",
+                                action="store_true",
+                                help="Print the full text of the license, if available",
+                            )
+                        ]
+                    ),
                 ),
                 KQFCommand(
                     self,
                     "mcu_info",
                     cmd_dump_mcu,
                     help_text="Prints info about MCUs, for debugging",
+                ),
+                KQFCommand(
+                    self,
+                    "d",
+                    cmd_d,
+                    needs_kqf=False,
+                    help_text="Does some development thing. Don't use if you don't know what it's for"
                 ),
                 KQFCommand(
                     self,
@@ -182,6 +191,18 @@ class KQFCli(object):
                             action="store_true",
                             help="Build before flashing",
                         ),
+                        KQFArg(
+                            "--skip-enter",
+                            action="store_true",
+                            dest="skip_bootloader_entry",
+                            help="Skip entering the bootloader (if configured)",
+                        ),
+                        KQFArg(
+                            "--service-control",
+                            action="store_true",
+                            dest="do_service_control",
+                            help="Stop and start klipper (if it is running) around flashing)"
+                        )
                     ),
                 ),
             ]
@@ -318,6 +339,11 @@ def cmd_dump_mcu(kqf, _):
     kqf.dump_mcu_info()
 
 
+def cmd_d(kqf, _):
+    from .util import proc_get_name
+    print(proc_get_name(1))
+    return
+
 def cmd_menuconfig(kqf: "KQF", args):
     with KQFFlavor(kqf, kqf.config, args.flavor) as flavor:
         kqf.menuconfig(flavor)
@@ -360,23 +386,42 @@ def cmd_flash(kqf: "KQF", args):
                 raise RuntimeError(
                     "Unable to build flavor {flavor}, aborting auto-build-and-flash"
                 )
+    if args.do_service_control:
+        # First, we need to determine if klipper is running.
+        # Ways we want to be able to detect/manage klipper
+        #  - systemd service
+        #  - redhat-style rc (var/subsys/lock
+        #  - debian-style rc (pidfiles only)
+        #  - busybox-style rc (Only K/S scripts, no status verb)
+        #  - openrc service
+        # Not going to bother with:
+        #  - runsv
+        #  - upstart
+        #  - supervisord
+        #  - klipper's provided start-klipper script (kill, reinvoke)
+        raise NotImplementedError("Service Control Not Yet Implemented")
     for mcu_name in mcu_names_to_flash:
         mcu = kqf.get_mcu(mcu_name)
         if not mcu:
             raise ValueError(
                 f"The MCU configuration '{mcu_name}' could not be found, check the KQF configuration"
             )
-        kqf.flash(mcu)
+        kqf.flash(
+            mcu, permit_bootloader_entry=False if args.skip_bootloader_entry else True
+        )
 
 
 def cmd_license(kqf: "KQF", args):
     if args.text:
         try:
             import pkgutil
-            data = pkgutil.get_data('kqf', 'GPL3.txt')
+
+            data = pkgutil.get_data("kqf", "GPL3.txt")
             print(data.decode("ASCII"))
         except Exception:
-            print("KQF could not load the license text, please see the FSF's website for a copy.")
+            print(
+                "KQF could not load the license text, please see the FSF's website for a copy."
+            )
             pass
     else:
         print(
@@ -387,7 +432,7 @@ def cmd_license(kqf: "KQF", args):
             " See the GNU General Public License for more details.\n"
             "You should have received a copy of the GNU General Public License along with this program."
             " If not, see <https://www.gnu.org/licenses/>.\n\n"
-            "KQF Contains a copy of the GPL3 text. To show the text, run this action with the --text argument" 
+            "KQF Contains a copy of the GPL3 text. To show the text, run this action with the --text argument"
             " you may want to pipe this to a pager, like `less'"
         )
 
