@@ -9,9 +9,9 @@ jobs:
     name: Determine version constants
     runs-on: ubuntu-22.04
     outputs:
-      shortsha: ${{ steps.conts.outputs.GIT_SHORTSHA }}
-      describe: ${{ steps.conts.outputs.GIT_DESCRIBE }}
-      tagname: ${{ steps.conts.outputs.SNAP_TAGNAME }}
+      shortsha: ${{ steps.consts.outputs.GIT_SHORTSHA }}
+      describe: ${{ steps.consts.outputs.GIT_DESCRIBE }}
+      tagname: ${{ steps.consts.outputs.SNAP_TAGNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
