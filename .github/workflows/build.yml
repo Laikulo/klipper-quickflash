@@ -68,12 +68,9 @@ jobs:
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/laikulo/klipper-quickflash/git/tags \
-            -f "tag=$SNAP_TAGNAME" \
-            -f "message=Prelease auto-tag" \
-            -f "object=${GITHUB_SHA}" -f "type=commit" \
-            -f "tagger[name]=AutoRelease" \
-            -f "tagger[email]=autorelease@haun.guru" 
+            /repos/laikulo/klipper-quickflash/git/refs \
+            -f "ref=refs/tags/$SNAP_TAGNAME" \
+            -f "sha=${GITHUB_SHA}" \
           gh release create -p "$SNAP_TAGNAME" -n "Auto snapshot" -t "Development Snapshot $GIT_DESCRIBE"
           fi
       - name: Get pyz artifact
