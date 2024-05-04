@@ -37,6 +37,8 @@ jobs:
   release:
     name: Create/Update prerelease
     runs-on: ubuntu-22.04
+    needs:
+     - determine_version
     steps:
       - name: Create release object if not exists
         run: |
