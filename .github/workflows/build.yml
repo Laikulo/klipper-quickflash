@@ -85,10 +85,12 @@ jobs:
       GIT_DESCRIBE: ${{ needs.determine_version.outputs.describe }}
       SNAP_TAGNAME: ${{ needs.determine_version.outputs.tagname }}
     steps:
-    - name: Get pyz artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: pyz
-    - name: Upload pyz
-      run:
-        gh release upload "${SNAP_TAGNAME}" --clobber kqf.pyz
+      - name: Get pyz artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pyz
+      - name: Upload pyz
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run:
+          gh release upload "${SNAP_TAGNAME}" --clobber kqf.pyz
