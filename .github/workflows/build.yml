@@ -55,8 +55,10 @@ jobs:
     steps:
       - name: Create release object if not exists
         run: |
+          set -x +e
           gh release view "$SNAP_TAGNAME" &>/dev/null
           release_exists=$?
+          set -e
           if ! $release_exists; then
             git tag "$SNAP_TAGNAME"
             git push origin "$SNAP_TAGNAME"
