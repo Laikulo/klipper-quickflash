@@ -8,16 +8,21 @@ jobs:
   determine_version:
     name: Determine version constants
     runs-on: ubuntu-22.04
+    outputs:
+      shortsha: ${{ steps.conts.outputs.GIT_SHORTSHA }}
+      describe: ${{ steps.conts.outputs.GIT_DESCRIBE }}
+      tagname: ${{ steps.conts.outputs.SNAP_TAGNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Determine Constants
+        id: consts
         run: |
           set -x
           GIT_SHORTSHA="$(git show-ref --abbrev "${GITHUB_REF}" | cut -f 1 -d' ')"
           GIT_DESCRIBE="$(git describe --always --tags --exclude '*-alpha*' --exclude '*-snapshot*')"
           SNAP_TAGNAME="${GIT_SHORTSHA}-snapshot"
-          cat <<END_ENV > "$GITHUB_ENV"
+          cat <<END_ENV > "$GITHUB_OUTPUT"
           GIT_SHORTSHA="${GIT_SHORTSHA}"
           GIT_DESCRIBE="${GIT_DESCRIBE}"
           SNAP_TAGNAME="${SNAP_TAGNAME}"
@@ -43,6 +48,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
      - determine_version
+    env:
+      GIT_SHORTSHA: ${{ needs.determine_version.outputs.shortsha }}
+      GIT_DESCRIBE: ${{ needs.determine_version.outputs.describe }}
+      SNAP_TAGNAME: ${{ needs.determine_version.outputs.tagname }}
     steps:
       - name: Create release object if not exists
         run: |
