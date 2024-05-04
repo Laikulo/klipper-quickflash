@@ -72,7 +72,7 @@ jobs:
             /repos/laikulo/klipper-quickflash/git/refs \
             -f "ref=refs/tags/$SNAP_TAGNAME" \
             -f "sha=${GITHUB_SHA}" 
-          gh release create -p "$SNAP_TAGNAME" -n "Auto snapshot" -t "Development Snapshot $GIT_DESCRIBE"
+          gh release create -R laikulo/klipper-quickflash -p "$SNAP_TAGNAME" -n "Auto snapshot" -t "Development Snapshot $GIT_DESCRIBE"
           fi
       - name: Get pyz artifact
         uses: actions/download-artifact@v4
