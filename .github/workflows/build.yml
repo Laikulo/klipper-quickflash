@@ -46,6 +46,8 @@ jobs:
   release:
     name: Create/Update prerelease
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     needs:
      - determine_version
     env:
@@ -61,7 +63,7 @@ jobs:
           gh release view "$SNAP_TAGNAME" &>/dev/null
           release_exists=$?
           set -e
-          if ! $release_exists; then
+          if [[ $release_exists -ne 0 ]]; then
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
