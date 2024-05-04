@@ -60,9 +60,17 @@ jobs:
           release_exists=$?
           set -e
           if ! $release_exists; then
-            git tag "$SNAP_TAGNAME"
-            git push origin "$SNAP_TAGNAME"
-            gh release -p "$SNAP_TAGNAME" -n "Auto snapshot" -t "Development Snapshot $GIT_DESCRIBE"
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/laikulo/klipper-quickflash/git/tags \
+            -f "tag=$SNAP_TAGNAME" \
+            -f "message=Prelease auto-tag" \
+            -f "object=${GITHUB_SHA}" -f "type=commit" \
+            -f "tagger[name]=AutoRelease" \
+            -f "tagger[email]=autorelease@haun.guru" 
+          gh release -p "$SNAP_TAGNAME" -n "Auto snapshot" -t "Development Snapshot $GIT_DESCRIBE"
           fi
       - name: Get pyz artifact
         uses: actions/download-artifact@v4
