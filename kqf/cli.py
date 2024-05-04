@@ -340,8 +340,8 @@ def cmd_dump_mcu(kqf, _):
 
 
 def cmd_d(kqf, _):
-    from .util import proc_get_name
-    print(proc_get_name(1))
+    from .updater import get_latest_release, get_release_pyz_url
+    print(get_release_pyz_url(get_latest_release()))
     return
 
 def cmd_menuconfig(kqf: "KQF", args):
