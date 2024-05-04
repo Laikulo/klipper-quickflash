@@ -12,4 +12,4 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Make
-        run: make build
+        run: make pyz
