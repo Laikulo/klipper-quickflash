@@ -54,6 +54,8 @@ jobs:
       SNAP_TAGNAME: ${{ needs.determine_version.outputs.tagname }}
     steps:
       - name: Create release object if not exists
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -x +e
           gh release view "$SNAP_TAGNAME" &>/dev/null
