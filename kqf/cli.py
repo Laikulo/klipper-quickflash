@@ -7,6 +7,7 @@ from typing import Callable, Optional, List, Sequence
 
 from . import config, util
 from .kqf import KQF, KQFFlavor
+from .updater import upgrade_kqf
 from .util import launch_editor
 from .version import KQF_VERSION, KQF_GITHASH, KQF_DATE
 
@@ -120,7 +121,34 @@ class KQFCli(object):
                     "d",
                     cmd_d,
                     needs_kqf=False,
-                    help_text="Does some development thing. Don't use if you don't know what it's for"
+                    help_text="Does some development thing. Don't use if you don't know what it's for",
+                ),
+                KQFCommand(
+                    self,
+                    'upgrade',
+                    cmd_upgrade,
+                    needs_kqf=False,
+                    help_text="Upgrade KQF to a new version",
+                    args=(
+                        KQFArg(
+                            '--complete',
+                            nargs="?",
+                            dest="upgrade_script_completed",
+                            help=argparse.SUPPRESS
+                        ),
+                        KQFArg(
+                            '--release',
+                            nargs="?",
+                            dest="target_release",
+                            help="Specify the release tag to upgrade to, defaults to the latest release"
+                        ),
+                        KQFArg(
+                            '--allow-prerelease',
+                            action='store_true',
+                            dest="allow_prerelease",
+                            help="Allow upgrading to prereleases"
+                        )
+                    )
                 ),
                 KQFCommand(
                     self,
@@ -201,8 +229,8 @@ class KQFCli(object):
                             "--service-control",
                             action="store_true",
                             dest="do_service_control",
-                            help="Stop and start klipper (if it is running) around flashing)"
-                        )
+                            help="Stop and start klipper (if it is running) around flashing)",
+                        ),
                     ),
                 ),
             ]
@@ -340,9 +368,19 @@ def cmd_dump_mcu(kqf, _):
 
 
 def cmd_d(kqf, _):
-    from .updater import get_latest_release, get_release_pyz_url
-    print(get_release_pyz_url(get_latest_release()))
+    from .updater import get_latest_release, get_release_pyz_url, upgrade_pyz
+    new_url = get_release_pyz_url(get_latest_release())
+    upgrade_pyz(new_url)
     return
+
+
+def cmd_upgrade(_, args):
+    if args.upgrade_script_completed:
+        from .updater import complete_upgrade
+        return complete_upgrade(args.upgrade_script_completed)
+    else:
+        upgrade_kqf(args.target_release, args.allow_prerelease)
+
 
 def cmd_menuconfig(kqf: "KQF", args):
     with KQFFlavor(kqf, kqf.config, args.flavor) as flavor:
