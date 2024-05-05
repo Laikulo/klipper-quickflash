@@ -35,6 +35,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Make
+        env:
+          SHELL: "/usr/bin/bash"
         run: make pyz
       - name: Archive pyz
         uses: actions/upload-artifact@v4
