@@ -83,11 +83,11 @@ def upgrade_pyz(new_pyz_url: str):
         os.remove(backup_pyz_path)
     script_lines = [
         f"#!/usr/bin/env sh",
-        f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}"
-        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}"
-        f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}"
-        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}"
-        f"echo Launching new KQF..."
+        f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}",
+        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}",
+        f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}",
+        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}",
+        f"echo Launching new KQF...",
         f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$1\""
     ]
     updater_path = current_pyz_path.with_suffix(".updater.sh")
