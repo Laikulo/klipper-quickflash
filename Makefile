@@ -59,6 +59,7 @@ generate: kqf/version_gen.py
 kqf/version_gen.py: KQF_PACK_VERSION=0.0.0-alpha
 kqf/version_gen.py: KQF_PACK_GITHASH=$(shell git rev-parse --short HEAD)
 kqf/version_gen.py: KQF_PACK_DATE=$(shell date +%Y-%m-%d)
+kqf/version_gen.py: SHELL=/usr/bin/bash
 kqf/version_gen.py: .FORCE
 	echo -e "KQF_PACK_VERSION = '$(KQF_PACK_VERSION)'\nKQF_PACK_GITHASH = '$(KQF_PACK_GITHASH)'\nKQF_PACK_DATE = '$(KQF_PACK_DATE)'" > kqf/version_gen.py
 
