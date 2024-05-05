@@ -58,7 +58,7 @@ def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False):
             if rev_data['prerelease'] and not allow_prereleases:
                 raise ValueError(f"{revision} is a prerelease, give --allow-prerelease to use anyway")
         else:
-            if allow_prereleases:
+            if not allow_prereleases:
                 rev_data = get_latest_release()
             else:
                 raise NotImplementedError("upgrade to latest prerelease")
