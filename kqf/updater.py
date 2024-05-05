@@ -104,7 +104,7 @@ def complete_upgrade(upgrade_blob):
     if upgrade_kind == 'PYZ':
         print("Cleaning up updater script")
         os.remove(pathlib.Path(upgrade_data['script_path']))
-    if upgrade_kind == "SIMPLE":
+    elif upgrade_kind == "SIMPLE":
         pass  # No action needed
     else:
         raise ValueError(f"Unexpected upgrade type {upgrade_kind}")
