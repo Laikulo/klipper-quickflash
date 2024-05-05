@@ -289,10 +289,12 @@ class KQFWizard(KQFCommand):
                     ["d", "e", "i"],
                 )
                 if config_generation_mode == "d":
+                    config_path.mkdir(exist_ok=True)
                     with config_path.open("w") as config_data:
                         config_data.write(config.KQFConfig.DEFAULT)
                         config_data.close()
                 elif config_generation_mode == "e":
+                    config_path.mkdir(exist_ok=True)
                     with config_path.open("w") as config_data:
                         config_data.close()
                 elif config_generation_mode == "i":
