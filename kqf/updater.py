@@ -49,6 +49,7 @@ def get_release_pyz_url(release_data):
 
 def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False):
     im = get_installation_method(True)
+    print("Preparing to upgrade KQF...")
     if im == InstallationMethod.PYZ:
         if revision:
             rev_data = get_release_tag(revision)
@@ -75,6 +76,7 @@ def upgrade_pyz(new_pyz_url: str):
     backup_pyz_path = current_pyz_path.with_suffix(current_pyz_path.suffix + ".bak")
     logging.info(f"KQF Installation path: {current_pyz_path}")
     logging.info(f"Downloading new pyz to {new_pyz_path}")
+    print(f"Downloading {new_pyz_url}...")
     urllib.request.urlretrieve(new_pyz_url, new_pyz_path)
     new_pyz_path.chmod(current_pyz_path.stat().st_mode)
     if backup_pyz_path.exists():
@@ -83,17 +85,30 @@ def upgrade_pyz(new_pyz_url: str):
         f"#!/usr/bin/env sh\n",
         f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}\n"
         f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}\n"
-        f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$0\"\n"
+        f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$1\"\n"
     ]
     updater_path = current_pyz_path.with_suffix(".updater.sh")
     updater_path.touch(mode=0o700)
     updater_path.write_text("".join(script_lines))
-    os.execv(updater_path.resolve(), [updater_path.resolve()])
+    updater_data = {
+        'kind': 'PYZ',
+        'script_path': str(updater_path)
+    }
+    print("Launching updater script...")
+    os.execv(updater_path.resolve(), [updater_path.resolve(), json.dumps(updater_data)])
 
 
 def complete_upgrade(upgrade_blob):
-    print(upgrade_blob)
-    pass
+    upgrade_data = json.loads(upgrade_blob)
+    upgrade_kind = upgrade_data['kind']
+    if upgrade_kind == 'PYZ':
+        print("Cleaning up updater script")
+        os.remove(pathlib.Path(upgrade_data['script_path']))
+    if upgrade_kind == "SIMPLE":
+        pass  # No action needed
+    else:
+        raise ValueError(f"Unexpected upgrade type {upgrade_kind}")
+    print("Upgrade Complete!")
 
 
 class InstallationMethod(Enum):
