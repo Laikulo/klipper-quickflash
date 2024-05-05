@@ -82,14 +82,17 @@ def upgrade_pyz(new_pyz_url: str):
     if backup_pyz_path.exists():
         os.remove(backup_pyz_path)
     script_lines = [
-        f"#!/usr/bin/env sh\n",
-        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}\n"
-        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}\n"
-        f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$1\"\n"
+        f"#!/usr/bin/env sh",
+        f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}"
+        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}"
+        f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}"
+        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}"
+        f"echo Launching new KQF..."
+        f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$1\""
     ]
     updater_path = current_pyz_path.with_suffix(".updater.sh")
     updater_path.touch(mode=0o700)
-    updater_path.write_text("".join(script_lines))
+    updater_path.write_text("\n".join(script_lines))
     updater_data = {
         'kind': 'PYZ',
         'script_path': str(updater_path)
