@@ -50,6 +50,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: install deps
+        run: pip install build
       - name: Make
         run: make whl
       - name: Archive whl
