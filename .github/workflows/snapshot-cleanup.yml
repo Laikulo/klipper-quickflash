@@ -15,7 +15,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -x
           gh release list -R laikulo/klipper-quickflash --json name,tagName,publishedAt -O desc \
           --jq '[.[]|select(.tagName | test("[a-f0-9]+-snapshot$")).tagName][5:][]' \
-          | xargs -n1 gh -R laikulo/klipper-quickflash release delete -y --cleanup-tag
+          | xargs -r -n1 gh -R laikulo/klipper-quickflash release delete -y --cleanup-tag
     
