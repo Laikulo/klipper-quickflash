@@ -5,7 +5,6 @@ from os import PathLike
 from typing import Optional
 import pathlib
 import textwrap
-import re
 
 from .klipper import KlipperMCU
 
@@ -193,7 +192,6 @@ class KQFConfig(object):
             if (path / ".git").is_dir() and (path / "klippy" / "klippy.py").is_file():
                 return path
         raise ValueError("Could not autodetect klipper config location")
-
 
 
 class KQFMCUConfig(object):
