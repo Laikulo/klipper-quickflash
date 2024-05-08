@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import pathlib
 import re
 from typing import Optional, Dict, TYPE_CHECKING
 
@@ -14,7 +15,8 @@ class KlipperConf(object):
     def __init__(self, filename):
         self.data = None
         self.data = configparser.ConfigParser()
-        self.data.read(filename)
+        self.data.read_file(IncludingConfigSource(filename))
+        print(self.data.sections())
 
         self.__mcu_sections = {
             (x if x == "mcu" else x[4:]): self.data[x]
@@ -224,3 +226,78 @@ flashing:
   options:{opt_str}
   loader:  '{self.bootloader}'
         """
+
+
+class IncludingConfigSource(object):
+    # The full path of all visited files, used to bail if the config is already included
+    VISITED_FILES = []
+    INCLUDE_RE = re.compile("\\[include (.*)]")
+
+    def __init__(self, source_path, source_dir=None):
+        # The file we are reading from. The position of this in the file is used to track ordering.
+        self.__base_path = pathlib.Path(source_path)
+        self.__base_file = self.__base_path.open("r")
+        if source_dir:
+            self.__source_dir = source_dir
+        else:
+            self.__source_dir = self.__base_path.parent
+        # A child ICS
+        self.__include_queue = []
+        # A line buffer, used to allow us to compare with config file semantics
+        self.__line_buffer = ""
+
+    def get_line(self):
+        # Gets a single line of config, with a terminating newline.
+        # Returns None at end of file
+        # If there is a queued child parser, but there is not one open
+        for child_parser in self.__include_queue.copy():
+            child_line = child_parser.get_line()
+            if child_line is not None:
+                return child_line
+            else:
+                self.__include_queue.remove(child_parser)
+
+        config_line = self.__base_file.readline()
+        if not config_line:
+            # We have reached the end of the file
+            return None
+        # Check if current line is an include
+        include_matches = IncludingConfigSource.INCLUDE_RE.match(config_line)
+        if include_matches:
+            # Variance from klipper behavior. Hidden files will match globs w/o leading dot
+            include_spec = include_matches[1]
+            paths_to_include = sorted(self.__base_path.parent.glob(include_spec))
+            # This is a variance from klipper behavior. It allows globs to be empty
+            if not paths_to_include:
+                print(self.__base_path)
+                print(include_spec)
+                raise ValueError("Config file referenced does not exist")
+
+            self.__include_queue += [IncludingConfigSource(path_to_include) for path_to_include in paths_to_include]
+            return self.get_line()
+        else:
+            return config_line
+
+    def readable(self):
+        return True
+
+    def readline(self):
+        line = self.get_line()
+        if line is not None:
+            return line
+        else:
+            return ''
+
+    def readlines(self):
+        return list(self)
+
+    def __next__(self):
+        line = self.get_line()
+        if line is not None:
+            return line
+        else:
+            raise StopIteration
+
+    def __iter__(self):
+        return self
+

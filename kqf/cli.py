@@ -370,7 +370,7 @@ def cmd_dump_mcu(kqf, _):
 
 
 def cmd_d(kqf, _):
-    from .config import IncludingConfigSource
+    from .klipper import IncludingConfigSource
     ics = IncludingConfigSource("test/includes.cfg")
     import configparser
     cp = configparser.ConfigParser()

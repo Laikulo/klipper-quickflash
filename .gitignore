@@ -6,6 +6,8 @@
 
 # Outputs
 kqf.pyz
+kqf.pyz.bak
+
 build/
 
 # Generated
