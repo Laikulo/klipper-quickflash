@@ -64,7 +64,7 @@ class KQFConfig(object):
     )
 
     @staticmethod
-    def get(path="~/.kqf/kqf.cfg"):
+    def get(path="~/.kqf/kqf.cfg") -> 'KQFConfig':
         logging.debug(f"Loading configuration from {path}")
         conf_path = pathlib.Path(path).expanduser()
         if not conf_path.exists():
@@ -81,7 +81,7 @@ class KQFConfig(object):
         logging.debug(f"Loaded configuration from {path}")
         return kqf_conf
 
-    def __load_from_conf(self, conf):
+    def __load_from_conf(self, conf) -> None:
         if "KQF" not in conf.sections():
             raise ValueError(
                 "KQF section is missing from the configuration. (It's case sensitive)"

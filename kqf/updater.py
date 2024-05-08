@@ -9,7 +9,7 @@ from typing import Optional
 from zipimport import zipimporter
 
 
-def get_latest_release(pre_release: bool = False):
+def get_latest_release(pre_release: bool = False) -> Optional[str]:
     if pre_release:
         raise NotImplementedError("Self-updating to a prerelease")
     try:
@@ -23,7 +23,7 @@ def get_latest_release(pre_release: bool = False):
         return None
 
 
-def get_release_tag(release_tag: str):
+def get_release_tag(release_tag: str) -> Optional[str]:
     try:
         gh_rel_data = urllib.request.urlopen(
             f"https://api.github.com/repos/laikulo/klipper-quickflash/releases/tags/{release_tag}"
@@ -35,7 +35,7 @@ def get_release_tag(release_tag: str):
         return None
 
 
-def get_release_pyz_url(release_data):
+def get_release_pyz_url(release_data) -> Optional[str]:
     if release_data is None:
         return None
     try:
@@ -46,7 +46,7 @@ def get_release_pyz_url(release_data):
         return None
 
 
-def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False):
+def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False) -> None:
     im = get_installation_method(True)
     print("Preparing to upgrade KQF...")
     if im == InstallationMethod.PYZ:
@@ -66,7 +66,7 @@ def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False):
         raise ValueError("Self-upgrades are not supported for this installation type")
 
 
-def upgrade_pyz(new_pyz_url: str):
+def upgrade_pyz(new_pyz_url: str) -> None:
     if get_installation_method() != InstallationMethod.PYZ:
         raise ValueError("pyz upgrade called for non pyz installation")
     # Detect the full path of the current pyz
@@ -100,7 +100,7 @@ def upgrade_pyz(new_pyz_url: str):
     os.execv(updater_path.resolve(), [updater_path.resolve(), json.dumps(updater_data)])
 
 
-def complete_upgrade(upgrade_blob):
+def complete_upgrade(upgrade_blob) -> None:
     upgrade_data = json.loads(upgrade_blob)
     upgrade_kind = upgrade_data['kind']
     if upgrade_kind == 'PYZ':

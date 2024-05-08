@@ -56,7 +56,7 @@ class ServiceManager(Enum):
     OPEN_RC = 5
 
 
-def proc_get_name(pid: int):
+def proc_get_name(pid: int) -> str:
     """
     Returns the name of the process given by id.
     Processes can set this, so it isn't a highly trusted thing
@@ -86,7 +86,7 @@ def proc_get_name(pid: int):
     return ps_name
 
 
-def get_system_service_manager(required: bool = False):
+def get_system_service_manager(required: bool = False) -> ServiceManager:
     """
     Determine the system-wide service manager, this may not be the only service manager, or even the one that is
     managing klippy

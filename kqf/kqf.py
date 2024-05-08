@@ -12,7 +12,7 @@ import shutil
 import contextlib
 import struct
 from datetime import datetime
-from typing import Union, Optional
+from typing import Union, Optional, List, Iterable
 
 from .config import KQFConfig
 from .klipper import KlipperConf, KlipperMCU
@@ -77,10 +77,10 @@ class KQF(object):
             for mcu in self._mcus:
                 self._mcus[mcu].self_extend()
 
-    def flavor_exists(self, flavor):
+    def flavor_exists(self, flavor) -> bool:
         return self.flavor_path(flavor).is_file()
 
-    def menuconfig(self, flavor: Union[str, "KQFFlavor"]):
+    def menuconfig(self, flavor: Union[str, "KQFFlavor"]) -> None:
         if isinstance(flavor, str):
             flavor = KQFFlavor(self, self.config, flavor)
             ctx = flavor
@@ -131,7 +131,7 @@ class KQF(object):
 
     def flash(
         self, mcu: KlipperMCU, ver: str = "latest", permit_bootloader_entry: bool = True
-    ):
+    ) -> None:
         if not mcu.flash_method:
             raise ValueError(
                 f"Flashing method for mcu {mcu.name} could not be automatically determined."
@@ -162,7 +162,7 @@ class KQF(object):
             )
         pass
 
-    def enter_bootloader(self, mcu: KlipperMCU):
+    def enter_bootloader(self, mcu: KlipperMCU) -> None:
         entry_method = mcu.flash_opts.get("entry_mode")
         if entry_method == "usb_serial":
             # Open the serial port at 1200 baud, and send a DTR pulse
@@ -258,7 +258,7 @@ class KQF(object):
         else:
             raise ValueError(f"Unknown bootloader entry method: {entry_method}")
 
-    def flash_make(self, mcu, ver: str):
+    def flash_make(self, mcu, ver: str) -> None:
         ignore_failure: Union[bool, str]
         if mcu.mcu_type == "stm32":
             ignore_failure = "Klipper misreports successes as failures when using dfu-util on some stm32 parts"
@@ -292,7 +292,7 @@ class KQF(object):
         "https://raw.githubusercontent.com/Arksine/katapult/master/scripts/flashtool.py"
     )
 
-    def _ensure_katapult(self):
+    def _ensure_katapult(self) -> pathlib.Path:
         flash_can_script = pathlib.Path("~/.kqf/lib/flashtool.py").expanduser()
         if not flash_can_script.exists():
             logging.debug(
@@ -307,7 +307,7 @@ class KQF(object):
             flash_can_script.chmod(cur_mode | 0o111)
         return flash_can_script
 
-    def _invoke_katapult(self, opts, extra_args):
+    def _invoke_katapult(self, opts, extra_args) -> None:
         environ = os.environ
         args = []
         interp: Optional[str] = None
@@ -323,7 +323,7 @@ class KQF(object):
         args += extra_args
         subprocess.run(args, check=True)
 
-    def flash_katapult(self, mcu: KlipperMCU, ver: str):
+    def flash_katapult(self, mcu: KlipperMCU, ver: str) -> None:
         opts = mcu.flash_opts
 
         katapult_mode = opts.get("mode", "can")
@@ -366,10 +366,10 @@ class KQF(object):
         args += ["-f", flavor.firmware_path(ver) / "klipper.bin"]
         self._invoke_katapult(opts, args)
 
-    def list_mcus(self):
+    def list_mcus(self) -> Iterable[str]:
         return self._mcus.keys()
 
-    def get_mcu(self, mcu_name):
+    def get_mcu(self, mcu_name) -> Optional['KlipperMCU']:
         try:
             return self._mcus[mcu_name]
         except KeyError:
@@ -380,7 +380,7 @@ class KQFFlavor(object):
     ACTIVE_FLAVOR = None
 
     @staticmethod
-    def list_existing(kqf: KQF):
+    def list_existing(kqf: KQF) -> List[str]:
         flavor_path = kqf.config.config_flavors_path
         if not flavor_path.is_dir():
             return []
@@ -414,13 +414,13 @@ class KQFFlavor(object):
     def path(self) -> pathlib.Path:
         return (self._config.config_flavors_path / self._flavor).with_suffix(".config")
 
-    def firmware_path(self, ver: Optional[str] = None):
+    def firmware_path(self, ver: Optional[str] = None) -> pathlib.Path:
         if ver:
             return self._config.firmware_storage_path / self._flavor / ver
         else:
             return self._config.firmware_storage_path / self._flavor
 
-    def list_firmware_versions(self):
+    def list_firmware_versions(self) -> List[str]:
         if self.firmware_path().is_dir():
             return [
                 f.name
@@ -488,7 +488,7 @@ class KQFFlavor(object):
         )
         KQFFlavor.ACTIVE_FLAVOR = None
 
-    def restore_artifacts(self, ver):
+    def restore_artifacts(self, ver) -> None:
         for f in self.firmware_path(ver).iterdir():
             if f.stem == "klipper":
                 self._parent.logger.debug(f"Restoring artifact {f}")

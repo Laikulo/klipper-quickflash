@@ -10,8 +10,6 @@
 KQF's configration lives in ~/.kqf/kqf.cfg, and will be generated on first start if it does not exist.
 You can edit you KQF config in your default editor with `kqf configedit`.
 
-The file is in python config format, which is the same as klipper uses,
-note that KQF does not support the klipper-specific `[include file.cfg]` syntax
 
 ### KQF Configration
 KQF's own configuration lives in the 'KQF' section
