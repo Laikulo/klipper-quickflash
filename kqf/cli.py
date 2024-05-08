@@ -370,9 +370,15 @@ def cmd_dump_mcu(kqf, _):
 
 
 def cmd_d(kqf, _):
-    from .updater import get_latest_release, get_release_pyz_url, upgrade_pyz
-    new_url = get_release_pyz_url(get_latest_release())
-    upgrade_pyz(new_url)
+    from .config import IncludingConfigSource
+    ics = IncludingConfigSource("test/includes.cfg")
+    from pprint import pprint as pp
+    import configparser
+    cp = configparser.ConfigParser()
+    cp.read_file(ics)
+    for i in cp.sections():
+        for k in cp[i].keys():
+            print(f'{i} -> {k}: {cp[i][k]}')
     return
 
 
