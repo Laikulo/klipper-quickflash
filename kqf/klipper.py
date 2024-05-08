@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class KlipperConf(object):
     def __init__(self, filename):
         self.data = None
-        self.data = configparser.ConfigParser()
+        self.data = configparser.ConfigParser(strict=False)
         self.data.read_file(IncludingConfigSource(filename))
         print(self.data.sections())
 
