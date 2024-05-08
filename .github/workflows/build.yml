@@ -138,4 +138,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run:
-          gh release upload -R laikulo/klipper-quickflash "${SNAP_TAGNAME}" --clobber dist/*.whl
+          gh release upload -R laikulo/klipper-quickflash "${SNAP_TAGNAME}" --clobber *.whl
