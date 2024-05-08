@@ -198,7 +198,7 @@ class KQFConfig(object):
 class IncludingConfigSource(object):
     # The full path of all visited files, used to bail if the config is already included
     VISITED_FILES = []
-    INCLUDE_RE = re.compile("\[include (.*)\]")
+    INCLUDE_RE = re.compile("\\[include (.*)]")
 
     def __init__(self, source_path, source_dir=None):
         # The file we are reading from. The position of this in the file is used to track ordering.
@@ -249,7 +249,8 @@ class IncludingConfigSource(object):
         return True
 
     def readline(self):
-        if line := self.get_line() is not None:
+        line = self.get_line()
+        if line is not None:
             return line
         else:
             return ''
@@ -258,7 +259,8 @@ class IncludingConfigSource(object):
         return list(self)
 
     def __next__(self):
-        if (line := self.get_line()) is not None:
+        line = self.get_line()
+        if line is not None:
             return line
         else:
             raise StopIteration

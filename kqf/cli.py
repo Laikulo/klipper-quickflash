@@ -372,7 +372,6 @@ def cmd_dump_mcu(kqf, _):
 def cmd_d(kqf, _):
     from .config import IncludingConfigSource
     ics = IncludingConfigSource("test/includes.cfg")
-    from pprint import pprint as pp
     import configparser
     cp = configparser.ConfigParser()
     cp.read_file(ics)
