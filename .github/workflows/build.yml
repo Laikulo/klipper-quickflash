@@ -133,7 +133,7 @@ jobs:
       - name: Get pyz artifact
         uses: actions/download-artifact@v4
         with:
-          name: whl
+          name: bdist
       - name: Upload pyz
         env:
           GH_TOKEN: ${{ github.token }}
