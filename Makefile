@@ -6,7 +6,12 @@ PY_TARGET_VER=3.7
 PY_TARGET_VER_NO_DOTS=$(subst .,,${PY_TARGET_VER})
 
 .PHONY: all
-all: pyz
+all: pyz whl
+
+
+.PHONY: whl
+whl: $(PY_FILES) pyproject.toml
+	pyproject-build
 
 .PHONY: pyz
 pyz: kqf.pyz

@@ -4,6 +4,8 @@ import pathlib
 import shutil
 import subprocess
 import json
+import pkgutil
+from importlib.metadata import distribution
 from enum import Enum
 from typing import Optional
 
@@ -117,3 +119,18 @@ def get_system_service_manager(required: bool = False) -> ServiceManager:
     if required:
         raise RuntimeError("Could not determine the system service manager")
     return ServiceManager.UNKNOWN
+
+
+def get_license_text() -> Optional[str]:
+    try:
+        return distribution("klipper_quick_flash").read_text("COPYING")
+    except Exception:
+        pass
+
+    try:
+        data = pkgutil.get_data("kqf", "GPL3.txt")
+        return data.decode("ASCII")
+    except Exception:
+        pass
+
+    return None

@@ -8,7 +8,7 @@ from typing import Callable, Optional, List, Sequence
 from . import config, util
 from .kqf import KQF, KQFFlavor
 from .updater import upgrade_kqf
-from .util import launch_editor
+from .util import launch_editor, get_license_text
 from .version import KQF_VERSION, KQF_GITHASH, KQF_DATE
 
 
@@ -125,30 +125,30 @@ class KQFCli(object):
                 ),
                 KQFCommand(
                     self,
-                    'upgrade',
+                    "upgrade",
                     cmd_upgrade,
                     needs_kqf=False,
                     help_text="Upgrade KQF to a new version",
                     args=(
                         KQFArg(
-                            '--complete',
+                            "--complete",
                             nargs="?",
                             dest="upgrade_script_completed",
-                            help=argparse.SUPPRESS
+                            help=argparse.SUPPRESS,
                         ),
                         KQFArg(
-                            '--release',
+                            "--release",
                             nargs="?",
                             dest="target_release",
-                            help="Specify the release tag to upgrade to, defaults to the latest release"
+                            help="Specify the release tag to upgrade to, defaults to the latest release",
                         ),
                         KQFArg(
-                            '--allow-prerelease',
-                            action='store_true',
+                            "--allow-prerelease",
+                            action="store_true",
                             dest="allow_prerelease",
-                            help="Allow upgrading to prereleases"
-                        )
-                    )
+                            help="Allow upgrading to prereleases",
+                        ),
+                    ),
                 ),
                 KQFCommand(
                     self,
@@ -371,19 +371,22 @@ def cmd_dump_mcu(kqf, _):
 
 def cmd_d(kqf, _):
     from .klipper import IncludingConfigSource
+
     ics = IncludingConfigSource("test/includes.cfg")
     import configparser
+
     cp = configparser.ConfigParser()
     cp.read_file(ics)
     for i in cp.sections():
         for k in cp[i].keys():
-            print(f'{i} -> {k}: {cp[i][k]}')
+            print(f"{i} -> {k}: {cp[i][k]}")
     return
 
 
 def cmd_upgrade(_, args):
     if args.upgrade_script_completed:
         from .updater import complete_upgrade
+
         return complete_upgrade(args.upgrade_script_completed)
     else:
         upgrade_kqf(args.target_release, args.allow_prerelease)
@@ -458,16 +461,13 @@ def cmd_flash(kqf: "KQF", args):
 
 def cmd_license(kqf: "KQF", args):
     if args.text:
-        try:
-            import pkgutil
-
-            data = pkgutil.get_data("kqf", "GPL3.txt")
-            print(data.decode("ASCII"))
-        except Exception:
+        license_text = get_license_text()
+        if license_text:
+            print(license_text)
+        else:
             print(
                 "KQF could not load the license text, please see the FSF's website for a copy."
             )
-            pass
     else:
         print(
             "KQF is free software: you can redistribute it and/or modify it under the terms of the "

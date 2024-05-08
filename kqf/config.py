@@ -63,7 +63,7 @@ class KQFConfig(object):
     )
 
     @staticmethod
-    def get(path="~/.kqf/kqf.cfg") -> 'KQFConfig':
+    def get(path="~/.kqf/kqf.cfg") -> "KQFConfig":
         logging.debug(f"Loading configuration from {path}")
         conf_path = pathlib.Path(path).expanduser()
         if not conf_path.exists():

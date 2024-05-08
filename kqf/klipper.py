@@ -272,7 +272,10 @@ class IncludingConfigSource(object):
                 print(include_spec)
                 raise ValueError("Config file referenced does not exist")
 
-            self.__include_queue += [IncludingConfigSource(path_to_include) for path_to_include in paths_to_include]
+            self.__include_queue += [
+                IncludingConfigSource(path_to_include)
+                for path_to_include in paths_to_include
+            ]
             return self.get_line()
         else:
             return config_line
@@ -285,7 +288,7 @@ class IncludingConfigSource(object):
         if line is not None:
             return line
         else:
-            return ''
+            return ""
 
     def readlines(self):
         return list(self)

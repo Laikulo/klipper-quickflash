@@ -369,7 +369,7 @@ class KQF(object):
     def list_mcus(self) -> Iterable[str]:
         return self._mcus.keys()
 
-    def get_mcu(self, mcu_name) -> Optional['KlipperMCU']:
+    def get_mcu(self, mcu_name) -> Optional["KlipperMCU"]:
         try:
             return self._mcus[mcu_name]
         except KeyError:

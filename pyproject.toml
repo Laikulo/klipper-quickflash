@@ -1,0 +1,20 @@
+[build-meta]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "klipper_quick_flash"
+version = "0.0.3"
+authors = [
+	{ name = "Aaron Haun", email = "aaron@haun.guru" }
+]
+description = "Tooks for flashing klipper in interesting ways"
+requires-python = ">=3.7"
+license = { text = "GPL3" }
+
+
+[project.scripts]
+kqf = "kqf.entrypoint:entrypoint"
+
+[tool.setuptools.packages.find]
+include = ["kqf*"]

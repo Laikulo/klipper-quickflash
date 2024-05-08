@@ -7,6 +7,7 @@ import urllib.request
 from enum import Enum
 from typing import Optional
 from zipimport import zipimporter
+from importlib.metadata import distribution
 
 
 def get_latest_release(pre_release: bool = False) -> Optional[str]:
@@ -14,8 +15,8 @@ def get_latest_release(pre_release: bool = False) -> Optional[str]:
         raise NotImplementedError("Self-updating to a prerelease")
     try:
         gh_rel_data = urllib.request.urlopen(
-            "https://api.github.com/repos/laikulo/klipper-quickflash/releases/latest"
-        )
+                "https://api.github.com/repos/laikulo/klipper-quickflash/releases/latest"
+                )
         gh_rel_json = json.load(gh_rel_data)
         return gh_rel_json
     except Exception:
@@ -26,8 +27,8 @@ def get_latest_release(pre_release: bool = False) -> Optional[str]:
 def get_release_tag(release_tag: str) -> Optional[str]:
     try:
         gh_rel_data = urllib.request.urlopen(
-            f"https://api.github.com/repos/laikulo/klipper-quickflash/releases/tags/{release_tag}"
-        )
+                f"https://api.github.com/repos/laikulo/klipper-quickflash/releases/tags/{release_tag}"
+                )
         gh_rel_json = json.load(gh_rel_data)
         return gh_rel_json
     except Exception:
@@ -54,8 +55,10 @@ def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False) -> Non
             rev_data = get_release_tag(revision)
             if rev_data is None:
                 raise ValueError(f"Could not find version {revision}")
-            if rev_data['prerelease'] and not allow_prereleases:
-                raise ValueError(f"{revision} is a prerelease, give --allow-prerelease to use anyway")
+            if rev_data["prerelease"] and not allow_prereleases:
+                raise ValueError(
+                        f"{revision} is a prerelease, give --allow-prerelease to use anyway"
+                        )
         else:
             if not allow_prereleases:
                 rev_data = get_latest_release()
@@ -81,31 +84,28 @@ def upgrade_pyz(new_pyz_url: str) -> None:
     if backup_pyz_path.exists():
         os.remove(backup_pyz_path)
     script_lines = [
-        "#!/usr/bin/env sh",
-        f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}",
-        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}",
-        f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}",
-        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}",
-        "echo Launching new KQF...",
-        f"exec {shlex.quote(str(current_pyz_path))} upgrade --complete \"$1\""
-    ]
+            "#!/usr/bin/env sh",
+            f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}",
+            f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}",
+            f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}",
+            f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}",
+            "echo Launching new KQF...",
+            f'exec {shlex.quote(str(current_pyz_path))} upgrade --complete "$1"',
+            ]
     updater_path = current_pyz_path.with_suffix(".updater.sh")
     updater_path.touch(mode=0o700)
     updater_path.write_text("\n".join(script_lines))
-    updater_data = {
-        'kind': 'PYZ',
-        'script_path': str(updater_path)
-    }
+    updater_data = {"kind": "PYZ", "script_path": str(updater_path)}
     print("Launching updater script...")
     os.execv(updater_path.resolve(), [updater_path.resolve(), json.dumps(updater_data)])
 
 
 def complete_upgrade(upgrade_blob) -> None:
     upgrade_data = json.loads(upgrade_blob)
-    upgrade_kind = upgrade_data['kind']
-    if upgrade_kind == 'PYZ':
+    upgrade_kind = upgrade_data["kind"]
+    if upgrade_kind == "PYZ":
         print("Cleaning up updater script")
-        os.remove(pathlib.Path(upgrade_data['script_path']))
+        os.remove(pathlib.Path(upgrade_data["script_path"]))
     elif upgrade_kind == "SIMPLE":
         pass  # No action needed
     else:
@@ -123,6 +123,14 @@ class InstallationMethod(Enum):
 def get_installation_method(required: bool = False) -> InstallationMethod:
     if isinstance(__loader__, zipimporter):
         return InstallationMethod.PYZ
+    try:
+        # Maybe also check that __file__ is in the same python path segment as dist below
+        dist_metadata = distribution("klipper_quick_flash")
+        if dist_metadata:
+            return InstallationMethod.PYTHON_PACKAGE
+    except Exception:
+        # Silently fail, pass to next detection
+        pass
     if required:
         raise ValueError("Could not determine the installation type")
     return InstallationMethod.UNKNOWN
