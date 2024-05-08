@@ -231,6 +231,7 @@ class IncludingConfigSource(object):
         # Check if current line is an include
         include_matches = IncludingConfigSource.INCLUDE_RE.match(config_line)
         if include_matches:
+            # Variance from klipper behavior. Hidden files will match globs w/o leading dot
             include_spec = include_matches[1]
             paths_to_include = sorted(self.__base_path.parent.glob(include_spec))
             # This is a variance from klipper behavior. It allows globs to be empty
