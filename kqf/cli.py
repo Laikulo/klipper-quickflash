@@ -289,7 +289,7 @@ class KQFWizard(KQFCommand):
                     ["d", "e", "i"],
                 )
                 if config_generation_mode == "d":
-                    config_path.mkdir(exist_ok=True)
+                    config_path.parent.mkdir(exist_ok=True)
                     with config_path.open("w") as config_data:
                         config_data.write(config.KQFConfig.DEFAULT)
                         config_data.close()

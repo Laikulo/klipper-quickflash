@@ -16,7 +16,6 @@ class KlipperConf(object):
         self.data = None
         self.data = configparser.ConfigParser(strict=False)
         self.data.read_file(IncludingConfigSource(filename))
-        print(self.data.sections())
 
         self.__mcu_sections = {
             (x if x == "mcu" else x[4:]): self.data[x]
