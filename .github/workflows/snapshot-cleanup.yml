@@ -1,0 +1,21 @@
+name: "Snapshot Cleanup"
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: clean up snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list -R laikulo/klipper-quickflash --json name,tagName,publishedAt -O desc \
+          --jq '[.[]|select(.tagName | test("[a-f0-9]+-snapshot$")).tagName][5:][]' \
+          | xargs -n1 gh -R laikulo/klipper-quickflash release delete -y --cleanup-tag
+    
