@@ -395,7 +395,7 @@ class KQF(object):
                              '-d', flavor.firmware_path(ver) / 'klipper.dict',
                              mcu.communication_device,
                              sdcard_board_config]
-        flash_proc = subprocess.run(flash_sdcard_args, check=True)
+        subprocess.run(flash_sdcard_args, check=True)
 
     def list_mcus(self) -> Iterable[str]:
         return self._mcus.keys()
