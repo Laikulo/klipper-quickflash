@@ -280,6 +280,7 @@ class KQF(object):
             make_args = [
                 "make",
                 "--old-file=out/klipper.elf",  # Prevent klipper from rebuilding when flashing
+                "--old-file=out/klipper.uf2"
             ]
             if opts.get("debug"):
                 make_args.append("-d")
