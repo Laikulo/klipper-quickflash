@@ -154,6 +154,8 @@ class KQF(object):
             self.flash_make(mcu, ver)
         elif mcu.flash_method == "katapult":
             self.flash_katapult(mcu, ver)
+        elif mcu.flash_method == "sdcard":
+            self.flash_sdcard(mcu, ver)
         elif mcu.flash_method == "none":
             logging.info("NOOP - Flash mode 'none'")
         else:
@@ -255,6 +257,9 @@ class KQF(object):
                     "-r",
                 ],
             )
+        elif entry_method == "noop":
+            # Cases where bootloader entry is irrelevant, such as flash-sdcard
+            pass
         else:
             raise ValueError(f"Unknown bootloader entry method: {entry_method}")
 
@@ -365,6 +370,32 @@ class KQF(object):
         logging.debug(f"Launching katapult flashtool: {args}")
         args += ["-f", flavor.firmware_path(ver) / "klipper.bin"]
         self._invoke_katapult(opts, args)
+
+    def flash_sdcard(self, mcu: KlipperMCU, ver):
+        flavor = KQFFlavor(self, self._config, mcu.flavor, True)
+        flash_opts = mcu.flash_opts
+        if 'board' not in flash_opts:
+            raise ValueError("Board not specified for sdcard flash")
+        sdcard_board_config = flash_opts['board']
+        flash_sdcard_path = self._config.klipper_repo / 'scripts' / 'flash-sdcard.sh'
+        if not flash_sdcard_path.is_file():
+            raise ValueError(f"{flash_sdcard_path} is not a file")
+        # Get the list of supported board definitions
+        sdcard_list_board = subprocess.run([flash_sdcard_path, '-l'], capture_output=True, check=True)
+        supported_boards = []
+        for output_line in sdcard_list_board.stdout.decode('utf-8').splitlines(False):
+            if output_line == "Available Boards:":
+                continue
+            else:
+                supported_boards.append(output_line.strip())
+        if sdcard_board_config not in supported_boards:
+            raise ValueError(f"{sdcard_board_config} is not supported by this version of Klipper flash-sdcard.sh")
+        flash_sdcard_args = [flash_sdcard_path,
+                             '-f', flavor.firmware_path(ver) / 'klipper.bin',
+                             '-d', flavor.firmware_path(ver) / 'klipper.dict',
+                             mcu.communication_device,
+                             sdcard_board_config]
+        flash_proc = subprocess.run(flash_sdcard_args, check=True)
 
     def list_mcus(self) -> Iterable[str]:
         return self._mcus.keys()
