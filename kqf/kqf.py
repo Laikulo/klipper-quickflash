@@ -165,6 +165,7 @@ class KQF(object):
         pass
 
     def enter_bootloader(self, mcu: KlipperMCU) -> None:
+        post_delay = 2
         entry_method = mcu.flash_opts.get("entry_mode")
         if entry_method == "usb_serial":
             # Open the serial port at 1200 baud, and send a DTR pulse
@@ -184,7 +185,6 @@ class KQF(object):
 
             with serial_path.open("ab+", buffering=0) as serial_port:
                 delay = 0.1
-                post_delay = 2
                 file_no = serial_port.fileno()
                 attrs = termios.tcgetattr(file_no)
                 self.logger.debug("Setting baud to 1200")
@@ -246,6 +246,7 @@ class KQF(object):
                 # Reset the terminal to old baud
                 termios.tcsetattr(file_no, termios.TCSADRAIN, old_attrs)
                 termios.tcdrain(file_no)
+            time.sleep(post_delay)
         elif entry_method == "can":
             self._invoke_katapult(
                 mcu.flash_opts,
@@ -257,6 +258,7 @@ class KQF(object):
                     "-r",
                 ],
             )
+            time.sleep(post_delay)
         elif entry_method == "noop":
             # Cases where bootloader entry is irrelevant, such as flash-sdcard
             pass
