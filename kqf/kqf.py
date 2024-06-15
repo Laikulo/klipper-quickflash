@@ -584,11 +584,11 @@ class KQF(object):
         logging.debug(f"Launching katapult flashtool: {args}")
         args += ["-f", flavor.firmware_path(ver) / "klipper.bin"]
 
-        if 'venv' not in opts and 'interpreter' not in opts:
+        if "venv" not in opts and "interpreter" not in opts:
             # Make an educated guess
             standard_kippy_venv = pathlib.Path("~/klippy-env/").expanduser()
-            if (standard_kippy_venv / 'bin' / 'python').exists():
-                opts['venv'] = str(standard_kippy_venv)
+            if (standard_kippy_venv / "bin" / "python").exists():
+                opts["venv"] = str(standard_kippy_venv)
 
         self._invoke_katapult(opts, args)
 
