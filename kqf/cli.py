@@ -13,9 +13,17 @@ from .version import KQF_VERSION, KQF_GITHASH, KQF_DATE
 
 
 class KQFCli(object):
+    __INSTANCE: Optional["KQFCli"] = None
+
+    @classmethod
+    def get(cls) -> "KQFCli":
+        if not KQFCli.__INSTANCE:
+            KQFCli.__INSTANCE = KQFCli()
+        return KQFCli.__INSTANCE
+
     @classmethod
     def main(cls):
-        return KQFCli().entrypoint()
+        return cls.get().entrypoint()
 
     def __init__(self):
         self._commands = []
@@ -88,153 +96,18 @@ class KQFCli(object):
         for cmd in cmds:
             self.add_command(cmd)
 
+    @classmethod
+    def kqf_command(cls, name, *args, **kwargs) -> Callable:
+        def cmd_wrapper(fn: Callable):
+            cli = cls.get()
+            cli.add_command(KQFCommand(cli, name, fn, *args, **kwargs))
+
+        return cmd_wrapper
+
     def _add_default_commands(self):
         self._wizard = KQFWizard(self)
         self.add_command(self._wizard)
-
-        self.add_commands(
-            [
-                KQFCommand(
-                    self,
-                    "license",
-                    cmd_license,
-                    needs_kqf=False,
-                    help_text="Print info about the license of KQF",
-                    args=(
-                        [
-                            KQFArg(
-                                "--text",
-                                action="store_true",
-                                help="Print the full text of the license, if available",
-                            )
-                        ]
-                    ),
-                ),
-                KQFCommand(
-                    self,
-                    "mcu_info",
-                    cmd_dump_mcu,
-                    help_text="Prints info about MCUs, for debugging",
-                ),
-                KQFCommand(
-                    self,
-                    "d",
-                    cmd_d,
-                    needs_kqf=False,
-                    help_text="Does some development thing. Don't use if you don't know what it's for",
-                ),
-                KQFCommand(
-                    self,
-                    "upgrade",
-                    cmd_upgrade,
-                    needs_kqf=False,
-                    help_text="Upgrade KQF to a new version",
-                    args=(
-                        KQFArg(
-                            "--complete",
-                            nargs="?",
-                            dest="upgrade_script_completed",
-                            help=argparse.SUPPRESS,
-                        ),
-                        KQFArg(
-                            "--release",
-                            nargs="?",
-                            dest="target_release",
-                            help="Specify the release tag to upgrade to, defaults to the latest release",
-                        ),
-                        KQFArg(
-                            "--allow-prerelease",
-                            action="store_true",
-                            dest="allow_prerelease",
-                            help="Allow upgrading to prereleases",
-                        ),
-                    ),
-                ),
-                KQFCommand(
-                    self,
-                    "configedit",
-                    cmd_edit_config,
-                    help_text="Opens an editor to modify the KQF configuration",
-                ),
-                KQFCommand(
-                    self,
-                    "menuconfig",
-                    cmd_menuconfig,
-                    help_text="Launch menuconfig for a flavor",
-                    args=(
-                        KQFArg(
-                            "flavor",
-                            metavar="FLAVOR",
-                            help="The flavor to run menuconfig for",
-                        ),
-                        KQFArg(
-                            "--build",
-                            action="store_true",
-                            default=False,
-                            help="Build firmware after configuring",
-                        ),
-                    ),
-                ),
-                KQFCommand(
-                    self,
-                    "build",
-                    cmd_build,
-                    help_text="Build firmware for a flavor",
-                    args=(
-                        KQFMEGroup(
-                            KQFArg(
-                                "flavor",
-                                metavar="FLAVOR",
-                                nargs="?",
-                                help="The flavor to build for",
-                            ),
-                            KQFArg(
-                                "--all",
-                                dest="build_all",
-                                action="store_true",
-                                help="Build all flavors",
-                            ),
-                            required=True,
-                        ),
-                    ),
-                ),
-                KQFCommand(
-                    self,
-                    "flash",
-                    cmd_flash,
-                    help_text="Flash to a given MCU",
-                    args=(
-                        KQFArg(
-                            "mcu", metavar="MCU", help="The MCU to flash", nargs="*"
-                        ),
-                        KQFArg(
-                            "--all",
-                            dest="flash_all",
-                            action="store_true",
-                            help="Flash all",
-                        ),
-                        KQFArg(
-                            "--build",
-                            dest="build_before_flash",
-                            action="store_true",
-                            help="Build before flashing",
-                        ),
-                        KQFArg(
-                            "--skip-enter",
-                            action="store_true",
-                            dest="skip_bootloader_entry",
-                            help="Skip entering the bootloader (if configured)",
-                        ),
-                        KQFArg(
-                            "--service-control",
-                            action="store_true",
-                            dest="do_service_control",
-                            help="Stop and start klipper (if it is running) around flashing)",
-                        ),
-                    ),
-                ),
-            ]
-        )
+        return
 
 
 class KQFCommand(object):
@@ -364,25 +237,54 @@ class KQFMEGroup(KQFArgBase):
             child.add_to_sp(grp)
 
 
-def cmd_dump_mcu(kqf, _):
+@KQFCli.kqf_command(
+    "mcu_info",
+    help_text="Prints info about MCUs, for debugging",
+    args=(
+        KQFArg(
+            "mcu_names",
+            nargs="*",
+            help="The mcu to print info about, defaults to all",
+            metavar="MCU",
+        ),
+    ),
+)
+def cmd_dump_mcu(kqf, args):
     kqf.inventory()
-    kqf.dump_mcu_info()
+    kqf.dump_mcu_info(mcu_names=args.mcu_names)
 
 
+@KQFCli.kqf_command("d", help_text="Does some debuggigng thing", needs_kqf=True)
 def cmd_d(kqf, _):
-    from .klipper import IncludingConfigSource
-
-    ics = IncludingConfigSource("test/includes.cfg")
-    import configparser
-
-    cp = configparser.ConfigParser()
-    cp.read_file(ics)
-    for i in cp.sections():
-        for k in cp[i].keys():
-            print(f"{i} -> {k}: {cp[i][k]}")
+    flavor = KQFFlavor(kqf, kqf.config, "rp2040-zero-canbridge")
+    print(flavor.get_kconfig_var("CONFIG_RP2040_HAVE_STAGE2"))
     return
 
 
+@KQFCli.kqf_command(
+    "upgrade",
+    help_text="Upgrade KQF to a new version",
+    args=(
+        KQFArg(
+            "--complete",
+            nargs="?",
+            dest="upgrade_script_completed",
+            help=argparse.SUPPRESS,
+        ),
+        KQFArg(
+            "--release",
+            nargs="?",
+            dest="target_release",
+            help="Specify the release tag to upgrade to, defaults to the latest release",
+        ),
+        KQFArg(
+            "--allow-prerelease",
+            action="store_true",
+            dest="allow_prerelease",
+            help="Allow upgrading to prereleases",
+        ),
+    ),
+)
 def cmd_upgrade(_, args):
     if args.upgrade_script_completed:
         from .updater import complete_upgrade
@@ -392,6 +294,23 @@ def cmd_upgrade(_, args):
         upgrade_kqf(args.target_release, args.allow_prerelease)
 
 
+@KQFCli.kqf_command(
+    "menuconfig",
+    help_text="Launch menuconfig for a flavor",
+    args=(
+        KQFArg(
+            "flavor",
+            metavar="FLAVOR",
+            help="The flavor to run menuconfig for",
+        ),
+        KQFArg(
+            "--build",
+            action="store_true",
+            default=False,
+            help="Build firmware after configuring",
+        ),
+    ),
+)
 def cmd_menuconfig(kqf: "KQF", args):
     with KQFFlavor(kqf, kqf.config, args.flavor) as flavor:
         kqf.menuconfig(flavor)
@@ -399,6 +318,27 @@ def cmd_menuconfig(kqf: "KQF", args):
             kqf.build(flavor)
 
 
+@KQFCli.kqf_command(
+    "build",
+    help_text="Build firmware for a flavor",
+    args=(
+        KQFMEGroup(
+            KQFArg(
+                "flavor",
+                metavar="FLAVOR",
+                nargs="?",
+                help="The flavor to build for",
+            ),
+            KQFArg(
+                "--all",
+                dest="build_all",
+                action="store_true",
+                help="Build all flavors",
+            ),
+            required=True,
+        ),
+    ),
+)
 def cmd_build(kqf: "KQF", args):
     if args.build_all:
         flavors = set(KQFFlavor.list_existing(kqf))
@@ -414,6 +354,37 @@ def cmd_build(kqf: "KQF", args):
     )
 
 
+@KQFCli.kqf_command(
+    "flash",
+    help_text="Flash to a given MCU",
+    args=(
+        KQFArg("mcu", metavar="MCU", help="The MCU to flash", nargs="*"),
+        KQFArg(
+            "--all",
+            dest="flash_all",
+            action="store_true",
+            help="Flash all",
+        ),
+        KQFArg(
+            "--build",
+            dest="build_before_flash",
+            action="store_true",
+            help="Build before flashing",
+        ),
+        KQFArg(
+            "--skip-enter",
+            action="store_true",
+            dest="skip_bootloader_entry",
+            help="Skip entering the bootloader (if configured)",
+        ),
+        KQFArg(
+            "--service-control",
+            action="store_true",
+            dest="do_service_control",
+            help="Stop and start klipper (if it is running) around flashing)",
+        ),
+    ),
+)
 def cmd_flash(kqf: "KQF", args):
     if args.flash_all and len(args.mcu) > 0:
         raise ValueError("Both '--all' and a list of flavors may not be specified")
@@ -459,6 +430,20 @@ def cmd_flash(kqf: "KQF", args):
         )
 
 
+@KQFCli.kqf_command(
+    "license",
+    needs_kqf=False,
+    help_text="Print info about the license of KQF",
+    args=(
+        [
+            KQFArg(
+                "--text",
+                action="store_true",
+                help="Print the full text of the license, if available",
+            )
+        ]
+    ),
+)
 def cmd_license(kqf: "KQF", args):
     if args.text:
         license_text = get_license_text()
@@ -482,5 +467,9 @@ def cmd_license(kqf: "KQF", args):
         )
 
 
+@KQFCli.kqf_command(
+    "configedit",
+    help_text="Opens an editor to modify the KQF configuration",
+)
 def cmd_edit_config(kqf: KQF, args):
     launch_editor(kqf.config_path)

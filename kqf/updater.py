@@ -15,8 +15,8 @@ def get_latest_release(pre_release: bool = False) -> Optional[str]:
         raise NotImplementedError("Self-updating to a prerelease")
     try:
         gh_rel_data = urllib.request.urlopen(
-                "https://api.github.com/repos/laikulo/klipper-quickflash/releases/latest"
-                )
+            "https://api.github.com/repos/laikulo/klipper-quickflash/releases/latest"
+        )
         gh_rel_json = json.load(gh_rel_data)
         return gh_rel_json
     except Exception:
@@ -27,8 +27,8 @@ def get_latest_release(pre_release: bool = False) -> Optional[str]:
 def get_release_tag(release_tag: str) -> Optional[str]:
     try:
         gh_rel_data = urllib.request.urlopen(
-                f"https://api.github.com/repos/laikulo/klipper-quickflash/releases/tags/{release_tag}"
-                )
+            f"https://api.github.com/repos/laikulo/klipper-quickflash/releases/tags/{release_tag}"
+        )
         gh_rel_json = json.load(gh_rel_data)
         return gh_rel_json
     except Exception:
@@ -57,8 +57,8 @@ def upgrade_kqf(revision: Optional[str], allow_prereleases: bool = False) -> Non
                 raise ValueError(f"Could not find version {revision}")
             if rev_data["prerelease"] and not allow_prereleases:
                 raise ValueError(
-                        f"{revision} is a prerelease, give --allow-prerelease to use anyway"
-                        )
+                    f"{revision} is a prerelease, give --allow-prerelease to use anyway"
+                )
         else:
             if not allow_prereleases:
                 rev_data = get_latest_release()
@@ -84,14 +84,14 @@ def upgrade_pyz(new_pyz_url: str) -> None:
     if backup_pyz_path.exists():
         os.remove(backup_pyz_path)
     script_lines = [
-            "#!/usr/bin/env sh",
-            f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}",
-            f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}",
-            f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}",
-            f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}",
-            "echo Launching new KQF...",
-            f'exec {shlex.quote(str(current_pyz_path))} upgrade --complete "$1"',
-            ]
+        "#!/usr/bin/env sh",
+        f"echo {shlex.quote('Backing up current KQF to ' + str(backup_pyz_path)) + '...'}",
+        f"mv {shlex.quote(str(current_pyz_path))} {shlex.quote(str(backup_pyz_path))}",
+        f"echo {shlex.quote('Copying new KQF to ' + str(current_pyz_path) + '...')}",
+        f"mv {shlex.quote(str(new_pyz_path))} {shlex.quote(str(current_pyz_path))}",
+        "echo Launching new KQF...",
+        f'exec {shlex.quote(str(current_pyz_path))} upgrade --complete "$1"',
+    ]
     updater_path = current_pyz_path.with_suffix(".updater.sh")
     updater_path.touch(mode=0o700)
     updater_path.write_text("\n".join(script_lines))

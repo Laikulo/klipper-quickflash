@@ -1,12 +1,14 @@
 # Configuration of KQF itself is handled here
 import configparser
 import logging
+import re
 from os import PathLike
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import pathlib
 import textwrap
 
-from .klipper import KlipperMCU
+if TYPE_CHECKING:
+    from .kqf import KlipperMCU
 
 
 class KQFConfig(object):
@@ -125,7 +127,7 @@ class KQFConfig(object):
             kqf_section.get("firmware_storage_path", "~/.kqf/firmware")
         ).expanduser()
         self.mcus = {
-            KlipperMCU.get_name_from_section_name(
+            KQFMCUConfig.get_name_from_section_name(
                 conf_section
             ): KQFMCUConfig.from_config(conf[conf_section])
             for conf_section in conf.sections()
@@ -216,7 +218,15 @@ class KQFMCUConfig(object):
         str
     ]  # Overrides value guessed from mcu_type, communication_*, and bootloader
     flash_opts: Optional[str]  # Overrides individual values for flash configuration
-    pass
+
+    @staticmethod
+    def get_name_from_section_name(in_str: str) -> str:
+        if in_str == "mcu":
+            return in_str
+        elif in_str.startswith("mcu "):
+            return in_str[4:]
+        else:
+            raise ValueError(f"Invalid MCU section name {in_str}")
 
     @classmethod
     def from_config(cls, config_section) -> "KQFMCUConfig":
@@ -238,3 +248,119 @@ class KQFMCUConfig(object):
             if opt.startswith("flash_") and opt != "flash_method"
         }
         return obj
+
+
+class KlipperConf(object):
+    def __init__(self, filename):
+        self.data = None
+        self.data = configparser.ConfigParser(strict=False)
+        self.data.read_file(IncludingConfigSource(filename))
+
+        self.__mcu_sections = {
+            (x if x == "mcu" else x[4:]): self.data[x]
+            for x in self.data.sections()
+            if x == "mcu" or x.startswith("mcu ")
+        }
+
+    def mcu_names(self):
+        return self.__mcu_sections.keys()
+
+    def extend_mcu(self, mcu: "KlipperMCU"):
+        if mcu.name in self.mcu_names():
+            mcu_conf = self.__mcu_sections[mcu.name]
+            if "serial" in mcu_conf:
+                mcu.communication_type = mcu.communication_type or "serial"
+                # TODO Extract from udev
+                mcu.communication_id = mcu.communication_id or mcu_conf.get("serial")
+                mcu.communication_device = mcu.communication_device or mcu_conf.get(
+                    "serial"
+                )
+                mcu.communication_speed = mcu.communication_speed or mcu_conf.get(
+                    "baud", "250000"
+                )
+            elif "canbus_uuid" in mcu_conf:
+                mcu.communication_type = mcu.communication_type or "can"
+                mcu.communication_id = mcu.communication_id or mcu_conf.get(
+                    "canbus_uuid"
+                )
+                mcu.communication_device = mcu.communication_device or mcu_conf.get(
+                    "canbus_interface", "can0"
+                )
+        pass
+
+
+class IncludingConfigSource(object):
+    # The full path of all visited files, used to bail if the config is already included
+    VISITED_FILES = []
+    INCLUDE_RE = re.compile("\\[include (.*)]")
+
+    def __init__(self, source_path, source_dir=None):
+        # The file we are reading from. The position of this in the file is used to track ordering.
+        self.__base_path = pathlib.Path(source_path)
+        self.__base_file = self.__base_path.open("r")
+        if source_dir:
+            self.__source_dir = source_dir
+        else:
+            self.__source_dir = self.__base_path.parent
+        # A child ICS
+        self.__include_queue = []
+        # A line buffer, used to allow us to compare with config file semantics
+        self.__line_buffer = ""
+
+    def get_line(self):
+        # Gets a single line of config, with a terminating newline.
+        # Returns None at end of file
+        # If there is a queued child parser, but there is not one open
+        for child_parser in self.__include_queue.copy():
+            child_line = child_parser.get_line()
+            if child_line is not None:
+                return child_line
+            else:
+                self.__include_queue.remove(child_parser)
+
+        config_line = self.__base_file.readline()
+        if not config_line:
+            # We have reached the end of the file
+            return None
+        # Check if current line is an include
+        include_matches = IncludingConfigSource.INCLUDE_RE.match(config_line)
+        if include_matches:
+            # Variance from klipper behavior. Hidden files will match globs w/o leading dot
+            include_spec = include_matches[1]
+            paths_to_include = sorted(self.__base_path.parent.glob(include_spec))
+            # This is a variance from klipper behavior. It allows globs to be empty
+            if not paths_to_include:
+                print(self.__base_path)
+                print(include_spec)
+                raise ValueError("Config file referenced does not exist")
+
+            self.__include_queue += [
+                IncludingConfigSource(path_to_include)
+                for path_to_include in paths_to_include
+            ]
+            return self.get_line()
+        else:
+            return config_line
+
+    def readable(self):
+        return True
+
+    def readline(self):
+        line = self.get_line()
+        if line is not None:
+            return line
+        else:
+            return ""
+
+    def readlines(self):
+        return list(self)
+
+    def __next__(self):
+        line = self.get_line()
+        if line is not None:
+            return line
+        else:
+            raise StopIteration
+
+    def __iter__(self):
+        return self
