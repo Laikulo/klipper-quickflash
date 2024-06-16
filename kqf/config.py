@@ -312,7 +312,6 @@ class KlipperConf(object):
             f"Found non-usb serial at {serial_dev_name} with id {serial_dev}"
             return serial_dev
 
-
     def extend_mcu(self, mcu: "KlipperMCU"):
         if mcu.name in self.mcu_names():
             mcu_conf = self.__mcu_sections[mcu.name]

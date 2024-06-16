@@ -155,6 +155,16 @@ class KlipperMCU(object):
             elif self.communication_type == "can":
                 self.flash_opts["mode"] = "can"
 
+        # If its katapult in canbridge mode, we need to figure out the usb_id, otherwise we won't know the serial path
+        if self.flash_method == "katapult" and is_canbridge:
+            sysfs_real_device = (
+                pathlib.Path("/sys/class/net")
+                / pathlib.Path(self.communication_device).name
+            ).resolve()
+            # The parent of the network device is the USB device that it comes from
+            device_usb_serial = (sysfs_real_device.parent.parent.parent / 'serial').read_text().strip()
+            self.flash_opts['usb_id'] = device_usb_serial
+
         if "entry_mode" not in self.flash_opts:
             if self.communication_type == "can":
                 self.flash_opts["entry_mode"] = "can"
@@ -192,7 +202,7 @@ class KlipperMCU(object):
     def pretty_format(self):
         if len(self.flash_opts) > 0:
             opt_listing = (os.linesep + " " * 4).join(
-                [f"{opt}: {self.flash_opts[opt]}" for opt in self.flash_opts]
+                [f"{opt}: '{self.flash_opts[opt]}'" for opt in self.flash_opts]
             )
             opt_str = os.linesep + " " * 4 + opt_listing
         else:
