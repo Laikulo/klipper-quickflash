@@ -71,7 +71,7 @@ class KQFCli(object):
                 import pdb
                 pdb.pm()
             else:
-                throw e
+                raise
 
     def _setup_logging(self):
         logging.basicConfig()
