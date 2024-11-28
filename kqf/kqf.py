@@ -209,6 +209,8 @@ class KlipperMCU(object):
             device_usb_serial = (sysfs_real_device.parent.parent.parent / 'serial').read_text().strip()
             self.flash_opts['usb_id'] = device_usb_serial
 
+        # TODO: If communication_device is a file, inspect it to see what kind of character device it is (if any)
+
         if "entry_mode" not in self.flash_opts:
             if self.communication_type == "can":
                 self.flash_opts["entry_mode"] = "can"
