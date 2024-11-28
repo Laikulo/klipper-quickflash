@@ -85,7 +85,7 @@ class KQFCli(object):
         )
         self._argparse.add_argument(
             "--postmortem", action="store_true",
-            help="Launch the postmortem debugger upon exceptions"
+            help=argparse.SUPPRESS
         )
         self._argparse.add_argument(
             "-c",
