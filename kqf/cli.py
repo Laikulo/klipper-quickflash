@@ -69,7 +69,7 @@ class KQFCli(object):
         except Exception as e:
             if args.postmortem:
                 import pdb
-                pdb.pm()
+                pdb.post_mortem(e.__traceback__)
             else:
                 raise
 
