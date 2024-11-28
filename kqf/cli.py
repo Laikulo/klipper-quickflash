@@ -403,7 +403,7 @@ def cmd_flash(kqf: "KQF", args):
             flavor_success = kqf.build(flavor)
             if not flavor_success:
                 raise RuntimeError(
-                    "Unable to build flavor {flavor}, aborting auto-build-and-flash"
+                    f"Unable to build flavor {flavor}, aborting auto-build-and-flash"
                 )
     if args.do_service_control:
         # First, we need to determine if klipper is running.

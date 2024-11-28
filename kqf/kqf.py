@@ -11,11 +11,49 @@ import pathlib
 import shutil
 import contextlib
 import struct
+import json
 from datetime import datetime
 from typing import Union, Optional, List, Iterable, Dict
+import sqlite3
+
 
 from .config import KQFConfig, KlipperConf
 from .util import get_can_interface_bitrate
+
+
+class Notebook(object):
+    def __init__(self, storage_location: pathlib.Path):
+        self.storage_path = storage_location
+        self._db = sqlite3.connect(self.storage_path)
+
+    def db_init(self):
+        self._db.execute("CREATE TABLE IF NOT EXISTS notebook (ctx varchar(31), key varchar(31) not null, val varchar(255) not null, primary key (ctx, key));")
+        self._db.commit()
+        pass
+
+    def set(self, context: str, key: str, value: any):
+        self._db.execute("INSERT OR REPLACE INTO notebook (ctx, key, val) VALUES (?,?,?)", (context, key, json.dumps(value)))
+        self._db.commit()
+
+    def get(self, context: str, key: str, default_value: Optional[any]=None):
+        cur = self._db.execute("SELECT val FROM notebook WHERE ctx=? and val=?", (context, key))
+        item = cur.fetchone()
+        if not item:
+            return default_value
+        else:
+            return json.loads(item)
+
+    def cache_filter(self, context, key, value, default=None):
+        if value:
+            self.set(context, key, value)
+            logging.debug(f"Wrote notebook {context}/{key}: {value}")
+            return value
+        else:
+            notebook_value = self.get(context, key)
+            if notebook_value:
+                return notebook_value
+            else:
+                return default
 
 
 class KlipperMCU(object):
@@ -65,6 +103,12 @@ class KlipperMCU(object):
             None  # The name of the config 'flavor' used, this is the name of the
         )
 
+    def note(self, key, val, default=None):
+        return self.kqf.note(f'mcu:{self.name}', key, val, default)
+
+    def get_comms_id(self, dev, val):
+        return self.note('communications_id', val)
+
     def self_extend(self):
         """
         Gather information either from the local system, or make educated guesses based on other values
@@ -111,7 +155,7 @@ class KlipperMCU(object):
             and self.communication_device
             and not self.communication_speed
         ):
-            self.communication_speed = get_can_interface_bitrate(
+            self.communication_speed = self.kqf.can_baud(
                 self.communication_device
             )
             if not self.communication_speed:
@@ -172,6 +216,9 @@ class KlipperMCU(object):
                 self.flash_opts["entry_mode"] = "usb_serial"
             elif self.communication_type == "serial" and is_serial:
                 self.flash_opts["entry_mode"] = "serial"
+
+        # Notebook fallbacks (these should be last)
+        self.communication_id = self.get_comms_id(self.communication_device, self.communication_id)
 
     def set_from_kqf_mcu_config(self, kqf_config):
         if kqf_config.config_flavor:
@@ -243,6 +290,14 @@ class KQF(object):
             s: KlipperMCU.from_kqf_config(s, self, self._config)
             for s in self._config.mcus.keys()
         }
+        self._notebook = Notebook(self._config.config_flavors_path.parent / 'notebook.db')
+        self._notebook.db_init()
+
+    def note(self, ctx, key, val, default=None):
+        return self._notebook.cache_filter(ctx, key, val, default)
+
+    def can_baud(self, dev):
+        return self.note(f"canif:{dev}", 'baud', get_can_interface_bitrate(dev))
 
     @classmethod
     def get(cls) -> "KQF":
