@@ -66,6 +66,12 @@ class KQFCli(object):
                 "If you encountered this in a released version of KQF, please let us know at\n"
                 "https://github.com/laikulo/klipper-quickflash/issues"
             )
+        except Exception as e:
+            if args.postmortem:
+                import pdb
+                pdb.pm()
+            else:
+                throw e
 
     def _setup_logging(self):
         logging.basicConfig()
@@ -76,6 +82,10 @@ class KQFCli(object):
         self._argparse = argparse.ArgumentParser()
         self._argparse.add_argument(
             "-v", action="store_true", help="Enable verbose output"
+        )
+        self._argparse.add_argument(
+            "--postmortem", action="store_true",
+            help="Launch the postmortem debugger upon exceptions"
         )
         self._argparse.add_argument(
             "-c",
