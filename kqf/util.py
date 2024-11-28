@@ -28,6 +28,58 @@ def get_can_interface_bitrate(ifname: str) -> Optional[str]:
     return bitrate
 
 
+def get_comms_id(serial_dev):
+    # The concept of a communication ID varies based on what the end-user specified.
+    # There is a good chance that the end user specified a symlink, and we need to find the
+    # device node.
+    serial_path = pathlib.Path(serial_dev)
+    if not serial_path.exists():
+        # It's not up right now, so give back null
+        logging.debug("Serial port not present, not trying to identify it")
+        return None
+    elif serial_path.is_symlink():
+        serial_path = serial_path.resolve()
+    if not serial_path.is_char_device():
+        raise ValueError(
+            f"Specified serial port {serial_path} was not a character device"
+        )
+    if serial_path.parent == pathlib.Path("/dev/pts"):
+        logging.debug(f"Found PTY device at {serial_path} with id {serial_dev}")
+        return serial_dev
+
+    serial_dev_name = serial_path.name
+    serial_sysfs_path = pathlib.Path("/sys/class/tty") / serial_dev_name
+    if not serial_sysfs_path.exists():
+        raise ValueError(
+            f"Unable to access information about serial device {serial_dev_name}:{serial_path}"
+        )
+
+    # /sys/devices/..../usbX/X-Y/X-Y.Z/....
+    serial_device_path = (serial_sysfs_path / "device").resolve()
+    device_driver = (serial_device_path / "driver").readlink().name
+    if device_driver == "cdc_acm":
+        # Not all cdc_acm's are glong to be klipper
+        usb_mfr = (serial_device_path.parent / "manufacturer").read_text().strip()
+        if usb_mfr == "Klipper":
+            # A klipper-managed virutal serial port (not a uart on a chip, or an external adapter)
+            serial_device_serial = (
+                (serial_device_path.parent / "serial").read_text().strip()
+            )
+            logging.debug(
+                f"Found Klipper-USB serial at {serial_dev_name}:{serial_path} with id {serial_device_serial}"
+            )
+            return serial_device_serial
+        else:
+            logging.debug(
+                f"Found non-Klipper usb serial at {serial_dev_name} with id {serial_dev}"
+            )
+            return serial_dev
+    else:
+        # Assume non-usb serial
+        logging.debug(f"Found non-usb serial at {serial_dev_name} with id {serial_dev}")
+        return serial_dev
+
+
 def launch_editor(filename: os.PathLike, editor: Optional[str] = None) -> None:
     editor = editor or find_editor()
     subprocess.run([editor, filename])
