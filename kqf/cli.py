@@ -33,6 +33,8 @@ class KQFCli(object):
 
     def entrypoint(self):
         args = self._argparse.parse_args()
+        if args.debugger:
+            breakpoint()
         if args.v:
             self._logger.setLevel(logging.DEBUG)
             logging.getLogger().setLevel(logging.DEBUG)
@@ -85,6 +87,10 @@ class KQFCli(object):
         )
         self._argparse.add_argument(
             "--postmortem", action="store_true",
+            help=argparse.SUPPRESS
+        )
+        self._argparse.add_argument(
+            "--debugger", action="store_true",
             help=argparse.SUPPRESS
         )
         self._argparse.add_argument(
